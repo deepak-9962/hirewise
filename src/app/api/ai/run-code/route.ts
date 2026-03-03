@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { geminiModel } from "@/lib/gemini";
+import { aiGenerate } from "@/lib/ai-engine";
+import { CodeRunSchema, FALLBACK_CODE_RUN, parseAIResponse } from "@/lib/ai-validation";
+import { sanitizeInput } from "@/lib/ai-sanitize";
 
 export async function POST(request: NextRequest) {
   try {
@@ -10,14 +12,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Code is required" }, { status: 400 });
     }
 
-    const prompt = `You are a code execution simulator. Analyze the following ${language || "javascript"} code and determine what the output would be if executed. Be precise and exact.
+    const safeCode = sanitizeInput(code, 6000);
+    const safeLang = sanitizeInput(language || "javascript", 50);
+
+    const prompt = `You are a code execution simulator. Analyze the following ${safeLang} code and determine what the output would be if executed. Be precise and exact.
 
 Code:
-\`\`\`${language || "javascript"}
-${code}
+\`\`\`${safeLang}
+${safeCode}
 \`\`\`
 
-Respond in STRICT JSON format only (no markdown, no code fences):
+Respond in STRICT JSON format only (no markdown, no explanation, no code fences):
 {
   "output": "<exact console output the code would produce>",
   "hasError": <boolean>,
@@ -25,12 +30,17 @@ Respond in STRICT JSON format only (no markdown, no code fences):
   "executionTime": "<estimated execution time like '12ms'>"
 }`;
 
-    const result = await geminiModel.generateContent(prompt);
-    const text = result.response.text().trim();
-    const cleaned = text.replace(/^```json?\n?/i, "").replace(/\n?```$/i, "").trim();
-    const parsed = JSON.parse(cleaned);
+    const raw = await aiGenerate(prompt, { skipCache: true });
 
-    return NextResponse.json({ success: true, ...parsed });
+    const retryFn = async () => aiGenerate(prompt, { skipCache: true });
+    const result = await parseAIResponse(raw, CodeRunSchema, retryFn);
+
+    if (result.valid) {
+      return NextResponse.json({ success: true, ...result.data });
+    }
+
+    console.warn("[run-code] Validation failed, using fallback:", result.errors);
+    return NextResponse.json({ success: true, ...FALLBACK_CODE_RUN });
   } catch (error) {
     console.error("Code execution error:", error);
     return NextResponse.json(

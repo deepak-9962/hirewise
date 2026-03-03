@@ -1,16 +1,31 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
-import { useCandidateInterviews, useCandidateReports, useCandidateApplications } from "@/hooks/useSupabase";
+import { useCandidateInterviews, useCandidateReports, useCandidateApplications, useJobs } from "@/hooks/useSupabase";
 
 export default function CandidateDashboard() {
   const { user, profile } = useAuth();
   const { data: interviews, loading: interviewsLoading } = useCandidateInterviews(user?.id);
   const { data: reports, loading: reportsLoading } = useCandidateReports(user?.id);
   const { data: applicationsData } = useCandidateApplications(user?.id);
+  const { data: jobsData, loading: jobsLoading } = useJobs("active");
+  const [jobSearch, setJobSearch] = useState("");
 
   const applications = (applicationsData ?? []) as any[];
+  const jobs = (jobsData ?? []) as any[];
+  const appliedJobIds = new Set(applications.map((a: any) => a.job_id));
+
+  const filteredJobs = jobs.filter((j: any) => {
+    if (!jobSearch) return true;
+    const q = jobSearch.toLowerCase();
+    return (
+      j.title?.toLowerCase().includes(q) ||
+      j.department?.toLowerCase().includes(q) ||
+      (j.target_skills ?? []).some((s: string) => s.toLowerCase().includes(q))
+    );
+  });
 
   const allInterviews = (interviews as Record<string, unknown>[] | null) || [];
   const upcoming = allInterviews.filter((i) => i.status === "scheduled");
@@ -55,15 +70,78 @@ export default function CandidateDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left column */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Browse Jobs CTA */}
-          <div className="bg-white dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 p-6 flex items-center justify-between">
-            <div>
-              <h2 className="font-bold text-slate-900 dark:text-white">Find Your Next Opportunity</h2>
-              <p className="text-sm text-slate-500 mt-1">Browse open positions and apply for AI-powered interviews</p>
+          {/* Available Jobs */}
+          <div className="bg-white dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700">
+            <div className="p-5 border-b border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <h2 className="font-bold text-slate-900 dark:text-white">Available Jobs ({filteredJobs.length})</h2>
+              <div className="relative">
+                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-base">search</span>
+                <input
+                  type="text"
+                  value={jobSearch}
+                  onChange={(e) => setJobSearch(e.target.value)}
+                  placeholder="Search jobs..."
+                  className="pl-9 pr-4 py-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/50 w-full sm:w-64"
+                />
+              </div>
             </div>
-            <Link href="/candidate/jobs" className="bg-primary text-white text-sm font-bold px-5 py-2.5 rounded-lg hover:bg-blue-700 transition-all shadow-md shadow-primary/20 flex items-center gap-2 shrink-0">
-              <span className="material-symbols-outlined text-sm">work</span> Browse Jobs
-            </Link>
+            {jobsLoading ? (
+              <div className="p-10 text-center text-slate-400">
+                <span className="animate-spin material-symbols-outlined text-3xl">progress_activity</span>
+                <p className="mt-2 text-sm">Loading jobs...</p>
+              </div>
+            ) : filteredJobs.length === 0 ? (
+              <div className="p-10 text-center">
+                <span className="material-symbols-outlined text-4xl text-slate-300 block mb-2">work_off</span>
+                <p className="text-sm text-slate-500">{jobSearch ? `No jobs found for "${jobSearch}"` : "No open positions right now"}</p>
+              </div>
+            ) : (
+              <div className="divide-y divide-slate-100 dark:divide-slate-700/50">
+                {filteredJobs.map((job: any) => {
+                  const hasApplied = appliedJobIds.has(job.id);
+                  return (
+                    <div key={job.id} className="p-4 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-start gap-3 flex-1 min-w-0">
+                          <div className="size-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                            <span className="material-symbols-outlined text-primary text-lg">work</span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <h3 className="text-sm font-bold text-slate-900 dark:text-white">{job.title}</h3>
+                              {hasApplied && (
+                                <span className="text-[10px] font-bold bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 px-2 py-0.5 rounded-full">Applied</span>
+                              )}
+                            </div>
+                            <p className="text-xs text-slate-500 mt-0.5">{job.department || "—"} · {job.type} {(job.openings ?? 1) > 1 ? `· ${job.openings} openings` : ""}</p>
+                            {(job.target_skills ?? []).length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-2">
+                                {(job.target_skills as string[]).slice(0, 4).map((skill: string) => (
+                                  <span key={skill} className="text-[10px] bg-primary/10 text-primary font-medium px-2 py-0.5 rounded-full">{skill}</span>
+                                ))}
+                                {(job.target_skills as string[]).length > 4 && (
+                                  <span className="text-[10px] text-slate-400">+{(job.target_skills as string[]).length - 4}</span>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                        <Link
+                          href={`/candidate/jobs/${job.id}`}
+                          className={`shrink-0 text-xs font-bold px-4 py-2 rounded-lg transition-all flex items-center gap-1 ${
+                            hasApplied
+                              ? "bg-slate-100 dark:bg-slate-700 text-slate-500"
+                              : "bg-primary text-white hover:bg-blue-700 shadow-sm shadow-primary/20"
+                          }`}
+                        >
+                          {hasApplied ? "View" : "Apply"} <span className="material-symbols-outlined text-sm">arrow_forward</span>
+                        </Link>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* Upcoming Interviews */}

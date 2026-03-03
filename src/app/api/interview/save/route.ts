@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import { getCurrentModelName } from "@/lib/ai-engine";
 
 export async function POST(request: NextRequest) {
   try {
@@ -139,7 +140,7 @@ export async function POST(request: NextRequest) {
       interview_id: actualInterviewId,
       candidate_id: candidateId,
       eval_type: "full_interview",
-      model_used: "gemini-2.0-flash",
+      model_used: getCurrentModelName(),
       score: overallScore,
       confidence: 85,
       latency_ms: 3000,
