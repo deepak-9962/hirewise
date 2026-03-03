@@ -55,6 +55,9 @@ create table public.jobs (
   target_skills text[] default '{}',
   status text default 'active' check (status in ('active', 'paused', 'closed')),
   recruiter_id uuid references public.profiles(id) on delete set null,
+  openings int default 1,
+  test_duration_minutes int default 30,
+  test_instructions text default '',
   applicants_count int default 0,
   interviews_count int default 0,
   avg_score numeric(5,2) default 0,
@@ -81,12 +84,39 @@ create table public.questions (
 );
 
 -- ============================================================
--- 4. INTERVIEWS
+-- 4. APPLICATIONS (candidate applies to a job)
+-- ============================================================
+create table public.applications (
+  id uuid primary key default uuid_generate_v4(),
+  job_id uuid references public.jobs(id) on delete cascade,
+  candidate_id uuid references public.profiles(id) on delete cascade,
+  status text default 'applied' check (status in ('applied', 'under_review', 'test_enabled', 'test_completed', 'rejected', 'hired')),
+  cover_note text default '',
+  resume_url text default '',
+  applied_at timestamptz default now(),
+  unique(job_id, candidate_id)
+);
+
+-- ============================================================
+-- 5. JOB QUESTIONS (links questions to jobs for the test)
+-- ============================================================
+create table public.job_questions (
+  id uuid primary key default uuid_generate_v4(),
+  job_id uuid references public.jobs(id) on delete cascade,
+  question_id uuid references public.questions(id) on delete cascade,
+  order_index int default 0,
+  time_limit_seconds int default 300,
+  unique(job_id, question_id)
+);
+
+-- ============================================================
+-- 6. INTERVIEWS
 -- ============================================================
 create table public.interviews (
   id uuid primary key default uuid_generate_v4(),
   job_id uuid references public.jobs(id) on delete cascade,
   candidate_id uuid references public.profiles(id) on delete cascade,
+  application_id uuid references public.applications(id) on delete set null,
   scheduled_at timestamptz,
   started_at timestamptz,
   completed_at timestamptz,
@@ -101,7 +131,7 @@ create table public.interviews (
 );
 
 -- ============================================================
--- 5. INTERVIEW RESPONSES (answers per question)
+-- 7. INTERVIEW RESPONSES (answers per question)
 -- ============================================================
 create table public.interview_responses (
   id uuid primary key default uuid_generate_v4(),
@@ -117,7 +147,7 @@ create table public.interview_responses (
 );
 
 -- ============================================================
--- 6. REPORTS (AI-generated interview reports)
+-- 8. REPORTS (AI-generated interview reports)
 -- ============================================================
 create table public.reports (
   id uuid primary key default uuid_generate_v4(),
@@ -136,7 +166,7 @@ create table public.reports (
 );
 
 -- ============================================================
--- 7. BIAS ALERTS
+-- 9. BIAS ALERTS
 -- ============================================================
 create table public.bias_alerts (
   id uuid primary key default uuid_generate_v4(),
@@ -151,7 +181,7 @@ create table public.bias_alerts (
 );
 
 -- ============================================================
--- 8. AI EVALUATION LOGS
+-- 10. AI EVALUATION LOGS
 -- ============================================================
 create table public.ai_evaluations (
   id uuid primary key default uuid_generate_v4(),
@@ -168,7 +198,7 @@ create table public.ai_evaluations (
 );
 
 -- ============================================================
--- 9. SYSTEM LOGS (admin metrics)
+-- 11. SYSTEM LOGS (admin metrics)
 -- ============================================================
 create table public.system_logs (
   id uuid primary key default uuid_generate_v4(),
@@ -178,13 +208,15 @@ create table public.system_logs (
 );
 
 -- ============================================================
--- 10. ROW LEVEL SECURITY (RLS)
+-- 12. ROW LEVEL SECURITY (RLS)
 -- ============================================================
 
 -- Enable RLS on all tables
 alter table public.profiles enable row level security;
 alter table public.jobs enable row level security;
 alter table public.questions enable row level security;
+alter table public.applications enable row level security;
+alter table public.job_questions enable row level security;
 alter table public.interviews enable row level security;
 alter table public.interview_responses enable row level security;
 alter table public.reports enable row level security;
@@ -227,6 +259,29 @@ create policy "Recruiters can delete questions" on public.questions
   for delete using (
     created_by = auth.uid() or
     exists (select 1 from public.profiles where id = auth.uid() and role = 'admin')
+  );
+
+-- APPLICATIONS: candidates see/create own, recruiters/admins see all
+create policy "Candidates view own applications" on public.applications
+  for select using (
+    candidate_id = auth.uid() or
+    exists (select 1 from public.profiles where id = auth.uid() and role in ('recruiter', 'admin'))
+  );
+create policy "Candidates can apply" on public.applications
+  for insert with check (
+    candidate_id = auth.uid()
+  );
+create policy "Recruiters can update applications" on public.applications
+  for update using (
+    exists (select 1 from public.profiles where id = auth.uid() and role in ('recruiter', 'admin'))
+  );
+
+-- JOB_QUESTIONS: anyone can read, recruiters/admins can manage
+create policy "Job questions are viewable by everyone" on public.job_questions
+  for select using (true);
+create policy "Recruiters can manage job questions" on public.job_questions
+  for all using (
+    exists (select 1 from public.profiles where id = auth.uid() and role in ('recruiter', 'admin'))
   );
 
 -- INTERVIEWS: candidates see own, recruiters see all for their jobs, admins see all

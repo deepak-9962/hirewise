@@ -18,6 +18,7 @@ interface SidebarProps {
 const navItems: Record<string, NavItem[]> = {
   candidate: [
     { label: "Dashboard", href: "/candidate/dashboard", icon: "dashboard" },
+    { label: "Browse Jobs", href: "/candidate/jobs", icon: "work" },
     { label: "My Interviews", href: "/candidate/interviews", icon: "videocam" },
     { label: "Reports", href: "/candidate/reports", icon: "description" },
     { label: "Profile", href: "/candidate/profile", icon: "person" },

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useJobs, createJob } from "@/hooks/useSupabase";
+import { useJobs, createJob, deleteJob } from "@/hooks/useSupabase";
 import { useAuth } from "@/context/AuthContext";
 
 export default function RecruiterJobsPage() {
@@ -10,7 +10,21 @@ export default function RecruiterJobsPage() {
   const { data: jobsData, loading, refetch } = useJobs();
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({ title: "", department: "", type: "Full-time", target_skills: "", description: "" });
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [form, setForm] = useState({ title: "", department: "", type: "Full-time", target_skills: "", description: "", openings: "1" });
+
+  const handleDelete = async (id: string) => {
+    setDeletingId(id);
+    const result = await deleteJob(id);
+    setDeletingId(null);
+    if (result?.error) {
+      alert("Failed to delete job: " + result.error);
+    } else {
+      setConfirmDeleteId(null);
+      refetch();
+    }
+  };
 
   const jobs = (jobsData ?? []) as any[];
 
@@ -24,8 +38,9 @@ export default function RecruiterJobsPage() {
       description: form.description,
       target_skills: form.target_skills.split(",").map((s) => s.trim()).filter(Boolean),
       recruiter_id: user.id,
+      openings: parseInt(form.openings) || 1,
     });
-    setForm({ title: "", department: "", type: "Full-time", target_skills: "", description: "" });
+    setForm({ title: "", department: "", type: "Full-time", target_skills: "", description: "", openings: "1" });
     setCreating(false);
     setShowCreate(false);
     refetch();
@@ -71,6 +86,10 @@ export default function RecruiterJobsPage() {
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Target Skills</label>
               <input type="text" value={form.target_skills} onChange={(e) => setForm({ ...form, target_skills: e.target.value })} className="w-full px-3 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/50" placeholder="React, TypeScript, Node.js" />
             </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">No. of Openings</label>
+              <input type="number" min="1" value={form.openings} onChange={(e) => setForm({ ...form, openings: e.target.value })} className="w-full px-3 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/50" placeholder="e.g. 3" />
+            </div>
           </div>
           <div className="mb-4">
             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Job Description</label>
@@ -101,6 +120,7 @@ export default function RecruiterJobsPage() {
                 <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3">Job Title</th>
                 <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3">Department</th>
                 <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3">Type</th>
+                <th className="text-center text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3">Openings</th>
                 <th className="text-center text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3">Applicants</th>
                 <th className="text-center text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3">Interviews</th>
                 <th className="text-center text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3">Status</th>
@@ -116,6 +136,9 @@ export default function RecruiterJobsPage() {
                   </td>
                   <td className="px-5 py-4 text-sm text-slate-500">{job.department}</td>
                   <td className="px-5 py-4"><span className="text-xs font-medium bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2 py-1 rounded-full">{job.type}</span></td>
+                  <td className="px-5 py-4 text-center">
+                    <span className="text-sm font-semibold text-slate-900 dark:text-white">{job.openings ?? 1}</span>
+                  </td>
                   <td className="px-5 py-4 text-center text-sm font-medium text-slate-900 dark:text-white">{job.applicants_count ?? 0}</td>
                   <td className="px-5 py-4 text-center text-sm font-medium text-slate-900 dark:text-white">{job.interviews_count ?? 0}</td>
                   <td className="px-5 py-4 text-center">
@@ -128,12 +151,52 @@ export default function RecruiterJobsPage() {
                     </span>
                   </td>
                   <td className="px-5 py-4 text-right">
-                    <Link href={`/recruiter/jobs/${job.id}`} className="text-sm text-primary font-medium hover:underline">Manage</Link>
+                    <div className="flex items-center justify-end gap-3">
+                      <Link href={`/recruiter/jobs/${job.id}`} className="text-sm text-primary font-medium hover:underline">Manage</Link>
+                      <button
+                        onClick={() => setConfirmDeleteId(job.id)}
+                        className="text-sm text-red-500 font-medium hover:underline"
+                      >Delete</button>
+                    </div>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+      {/* Confirm Delete Modal */}
+      {confirmDeleteId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 animate-fade-in">
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-6 w-full max-w-sm shadow-xl">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="size-10 rounded-full bg-red-100 flex items-center justify-center">
+                <span className="material-symbols-outlined text-red-600">delete</span>
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 dark:text-white">Delete Job</h3>
+                <p className="text-xs text-slate-500">This action cannot be undone.</p>
+              </div>
+            </div>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mb-6">
+              Are you sure you want to delete <span className="font-semibold text-slate-900 dark:text-white">{jobs.find((j: any) => j.id === confirmDeleteId)?.title}</span>? All associated interviews and data will be permanently removed.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setConfirmDeleteId(null)}
+                className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-lg transition-all"
+              >Cancel</button>
+              <button
+                onClick={() => handleDelete(confirmDeleteId)}
+                disabled={deletingId === confirmDeleteId}
+                className="bg-red-600 text-white px-5 py-2 rounded-lg text-sm font-bold hover:bg-red-700 transition-all disabled:opacity-50 flex items-center gap-2"
+              >
+                {deletingId === confirmDeleteId ? (
+                  <><span className="size-4 border-2 border-white/30 border-t-white rounded-full animate-spin inline-block"></span> Deleting...</>
+                ) : "Delete Job"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

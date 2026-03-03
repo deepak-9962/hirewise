@@ -1,17 +1,16 @@
 "use client";
 
-import { useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
-import { useCandidateInterviews, useCandidateReports, useOpenJobs, applyToJob } from "@/hooks/useSupabase";
+import { useCandidateInterviews, useCandidateReports, useCandidateApplications } from "@/hooks/useSupabase";
 
 export default function CandidateDashboard() {
   const { user, profile } = useAuth();
-  const { data: interviews, loading: interviewsLoading, refetch: refetchInterviews } = useCandidateInterviews(user?.id);
+  const { data: interviews, loading: interviewsLoading } = useCandidateInterviews(user?.id);
   const { data: reports, loading: reportsLoading } = useCandidateReports(user?.id);
-  const { data: openJobsData, loading: jobsLoading, refetch: refetchJobs } = useOpenJobs();
-  const [applyingTo, setApplyingTo] = useState<string | null>(null);
-  const [applyMessage, setApplyMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const { data: applicationsData } = useCandidateApplications(user?.id);
+
+  const applications = (applicationsData ?? []) as any[];
 
   const allInterviews = (interviews as Record<string, unknown>[] | null) || [];
   const upcoming = allInterviews.filter((i) => i.status === "scheduled");
@@ -25,27 +24,6 @@ export default function CandidateDashboard() {
   const isLoading = interviewsLoading || reportsLoading;
   const displayName = profile?.name || user?.email?.split("@")[0] || "there";
 
-  // Open jobs posted by recruiters (exclude jobs already applied to)
-  const appliedJobIds = new Set(allInterviews.map((i) => String(i.job_id)));
-  const openJobs = ((openJobsData as Record<string, unknown>[] | null) || []).filter(
-    (job) => !appliedJobIds.has(String(job.id))
-  );
-
-  const handleApply = async (jobId: string) => {
-    if (!user) return;
-    setApplyingTo(jobId);
-    setApplyMessage(null);
-    const { error } = await applyToJob(jobId, user.id);
-    if (error) {
-      setApplyMessage({ type: "error", text: typeof error === "string" ? error : "Failed to apply. Please try again." });
-    } else {
-      setApplyMessage({ type: "success", text: "Applied successfully! Check your upcoming interviews." });
-      refetchInterviews();
-      refetchJobs();
-    }
-    setApplyingTo(null);
-    setTimeout(() => setApplyMessage(null), 4000);
-  };
   return (
     <div className="animate-fade-in">
       {/* Header */}
@@ -77,75 +55,15 @@ export default function CandidateDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left column */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Open Positions — Browse & Apply */}
-          <div className="bg-white dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700">
-            <div className="p-5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
-              <h2 className="font-bold text-slate-900 dark:text-white">Open Positions</h2>
-              <span className="text-xs text-slate-400">{openJobs.length} available</span>
+          {/* Browse Jobs CTA */}
+          <div className="bg-white dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 p-6 flex items-center justify-between">
+            <div>
+              <h2 className="font-bold text-slate-900 dark:text-white">Find Your Next Opportunity</h2>
+              <p className="text-sm text-slate-500 mt-1">Browse open positions and apply for AI-powered interviews</p>
             </div>
-            {applyMessage && (
-              <div className={`mx-5 mt-4 px-4 py-2.5 rounded-lg text-sm font-medium ${applyMessage.type === "success" ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
-                {applyMessage.text}
-              </div>
-            )}
-            <div className="max-h-[420px] overflow-y-auto divide-y divide-slate-100 dark:divide-slate-700 scrollbar-thin">
-              {jobsLoading ? (
-                <div className="p-10 text-center text-slate-400">
-                  <span className="animate-spin material-symbols-outlined text-3xl">progress_activity</span>
-                  <p className="mt-2">Loading open positions...</p>
-                </div>
-              ) : openJobs.length > 0 ? openJobs.map((job) => (
-                <div key={String(job.id)} className="p-5 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex items-start gap-4 min-w-0">
-                      <div className="size-12 rounded-xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center flex-shrink-0">
-                        <span className="material-symbols-outlined text-primary">work</span>
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-semibold text-slate-900 dark:text-white truncate">{String(job.title)}</p>
-                        <p className="text-sm text-slate-500 mt-0.5">{String(job.department || "General")} · {String(job.type || "Full-time")}</p>
-                        {(job.target_skills as string[])?.length > 0 && (
-                          <div className="flex flex-wrap gap-1.5 mt-2">
-                            {(job.target_skills as string[]).slice(0, 4).map((skill) => (
-                              <span key={skill} className="bg-primary/10 text-primary text-[11px] font-medium px-2 py-0.5 rounded-full">{skill}</span>
-                            ))}
-                            {(job.target_skills as string[]).length > 4 && (
-                              <span className="text-[11px] text-slate-400">+{(job.target_skills as string[]).length - 4} more</span>
-                            )}
-                          </div>
-                        )}
-                        {job.description && (
-                          <p className="text-xs text-slate-400 mt-2 line-clamp-2">{String(job.description)}</p>
-                        )}
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => handleApply(String(job.id))}
-                      disabled={applyingTo === String(job.id)}
-                      className="bg-primary text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-blue-700 transition-all disabled:opacity-50 flex-shrink-0 flex items-center gap-1.5"
-                    >
-                      {applyingTo === String(job.id) ? (
-                        <>
-                          <span className="animate-spin material-symbols-outlined text-sm">progress_activity</span>
-                          Applying...
-                        </>
-                      ) : (
-                        <>
-                          <span className="material-symbols-outlined text-sm">send</span>
-                          Apply
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              )) : (
-                <div className="p-10 text-center text-slate-400">
-                  <span className="material-symbols-outlined text-4xl mb-2">work_off</span>
-                  <p>No open positions right now</p>
-                  <p className="text-xs mt-1">Check back later for new opportunities</p>
-                </div>
-              )}
-            </div>
+            <Link href="/candidate/jobs" className="bg-primary text-white text-sm font-bold px-5 py-2.5 rounded-lg hover:bg-blue-700 transition-all shadow-md shadow-primary/20 flex items-center gap-2 shrink-0">
+              <span className="material-symbols-outlined text-sm">work</span> Browse Jobs
+            </Link>
           </div>
 
           {/* Upcoming Interviews */}
@@ -182,6 +100,56 @@ export default function CandidateDashboard() {
                   <p className="text-xs mt-1">Apply to a position above to get started</p>
                 </div>
               )}
+            </div>
+          </div>
+
+          {/* Active Applications */}
+          <div className="bg-white dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700">
+            <div className="p-5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+              <h2 className="font-bold text-slate-900 dark:text-white">Active Applications</h2>
+              <Link href="/candidate/jobs" className="text-sm text-primary font-medium hover:underline">Browse Jobs</Link>
+            </div>
+            <div className="divide-y divide-slate-100 dark:divide-slate-700">
+              {applications.length === 0 ? (
+                <div className="p-8 text-center">
+                  <span className="material-symbols-outlined text-3xl text-slate-300 block mb-2">work_off</span>
+                  <p className="text-sm text-slate-500">No applications yet.</p>
+                  <Link href="/candidate/jobs" className="text-sm text-primary font-medium hover:underline mt-1 inline-block">Browse open jobs</Link>
+                </div>
+              ) : applications.slice(0, 5).map((app: any) => {
+                const statusStyles: Record<string, string> = {
+                  applied: "bg-blue-100 text-blue-700",
+                  under_review: "bg-amber-100 text-amber-700",
+                  test_enabled: "bg-green-100 text-green-700",
+                  test_completed: "bg-purple-100 text-purple-700",
+                  rejected: "bg-red-100 text-red-700",
+                  hired: "bg-emerald-100 text-emerald-700",
+                };
+                const statusLabels: Record<string, string> = {
+                  applied: "Applied",
+                  under_review: "Under Review",
+                  test_enabled: "Test Ready",
+                  test_completed: "Test Done",
+                  rejected: "Rejected",
+                  hired: "Hired!",
+                };
+                return (
+                  <div key={app.id} className="p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="size-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                        <span className="material-symbols-outlined text-primary text-sm">work</span>
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900 dark:text-white">{app.jobs?.title ?? "—"}</p>
+                        <p className="text-xs text-slate-400">{app.jobs?.department ?? ""} · {new Date(app.applied_at).toLocaleDateString()}</p>
+                      </div>
+                    </div>
+                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${statusStyles[app.status] ?? "bg-slate-100 text-slate-500"}`}>
+                      {statusLabels[app.status] ?? app.status}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           </div>
 

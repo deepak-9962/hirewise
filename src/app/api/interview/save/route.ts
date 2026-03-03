@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 
 export async function POST(request: NextRequest) {
   try {
+    const supabaseAdmin = getSupabaseAdmin();
     const body = await request.json();
     const {
       interviewId,
       candidateId,
+      jobId,
+      applicationId,
       jobTitle,
       questions,
       answers,
@@ -27,7 +30,7 @@ export async function POST(request: NextRequest) {
     if (interviewId && interviewId !== "demo") {
       const { data: existing } = await supabaseAdmin
         .from("interviews")
-        .select("id")
+        .select("id, application_id")
         .eq("id", interviewId)
         .single();
 
@@ -42,6 +45,15 @@ export async function POST(request: NextRequest) {
             total_questions: questions?.length ?? 0,
           })
           .eq("id", interviewId);
+
+        // Update the linked application status to test_completed
+        const appId = existing.application_id || applicationId;
+        if (appId) {
+          await supabaseAdmin
+            .from("applications")
+            .update({ status: "test_completed" })
+            .eq("id", appId);
+        }
       } else {
         actualInterviewId = null; // Will create new
       }
@@ -55,9 +67,11 @@ export async function POST(request: NextRequest) {
         .from("interviews")
         .insert({
           candidate_id: candidateId,
+          job_id: jobId || null,
+          application_id: applicationId || null,
           status: "completed",
           type: "Technical",
-          started_at: new Date(Date.now() - 30 * 60 * 1000).toISOString(), // ~30 min ago
+          started_at: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
           completed_at: new Date().toISOString(),
           scheduled_at: new Date().toISOString(),
           score: overallScore,
@@ -71,6 +85,14 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Failed to save interview", detail: interviewError.message }, { status: 500 });
       }
       actualInterviewId = newInterview.id;
+
+      // Update the linked application status to test_completed
+      if (applicationId) {
+        await supabaseAdmin
+          .from("applications")
+          .update({ status: "test_completed" })
+          .eq("id", applicationId);
+      }
     }
 
     // 2. Save each response
@@ -82,6 +104,7 @@ export async function POST(request: NextRequest) {
 
         await supabaseAdmin.from("interview_responses").insert({
           interview_id: actualInterviewId,
+          question_id: q.dbId || null,
           answer_text: answerText,
           is_submitted: true,
           score: evaluation?.score ?? null,

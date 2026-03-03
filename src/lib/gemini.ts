@@ -7,7 +7,7 @@ function getModel(): GenerativeModel {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) throw new Error("Missing GEMINI_API_KEY");
     const genAI = new GoogleGenerativeAI(apiKey);
-    _model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+    _model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
   }
   return _model;
 }
@@ -101,3 +101,48 @@ Generate a report in STRICT JSON format only (no markdown, no code fences):
   const cleaned = text.replace(/^```json?\n?/i, "").replace(/\n?```$/i, "").trim();
   return JSON.parse(cleaned);
 }
+
+export async function generateQuestions(jobTitle: string, skills: string[], count: number = 5) {
+  const skillList = skills.join(", ") || "general software engineering";
+  const prompt = `You are an expert technical interviewer creating an interview assessment.
+
+Job Title: ${jobTitle}
+Required Skills: ${skillList}
+Number of Questions: ${count}
+
+Generate ${count} interview questions covering the listed skills. Mix descriptive and coding questions.
+Respond in STRICT JSON format only (no markdown, no code fences):
+[
+  {
+    "text": "<question text>",
+    "type": "descriptive",
+    "skill": "<skill from the list>",
+    "difficulty": "Easy|Medium|Hard",
+    "time_limit": <seconds: 180-600 for descriptive>
+  },
+  {
+    "text": "<question text>",
+    "type": "coding",
+    "skill": "<skill from the list>",
+    "difficulty": "Easy|Medium|Hard",
+    "time_limit": <seconds: 300-900 for coding>,
+    "starter_code": "<optional boilerplate>",
+    "language": "javascript"
+  }
+]
+Make at least ${Math.ceil(count / 3)} coding questions. Cover different difficulties.`;
+
+  const result = await geminiModel.generateContent(prompt);
+  const text = result.response.text().trim();
+  const cleaned = text.replace(/^```json?\n?/i, "").replace(/\n?```$/i, "").trim();
+  return JSON.parse(cleaned) as {
+    text: string;
+    type: string;
+    skill: string;
+    difficulty: string;
+    time_limit: number;
+    starter_code?: string;
+    language?: string;
+  }[];
+}
+

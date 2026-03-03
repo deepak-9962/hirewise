@@ -57,6 +57,25 @@ export function useJobs(status?: string) {
   }, [status]);
 }
 
+export function useJobById(id?: string) {
+  return useSupabaseQuery(
+    () => supabase.from("jobs").select("*").eq("id", id ?? "").single(),
+    [id]
+  );
+}
+
+export function useInterviewsByJob(jobId?: string) {
+  return useSupabaseQuery(
+    () =>
+      supabase
+        .from("interviews")
+        .select("*, profiles!candidate_id(name, email)")
+        .eq("job_id", jobId ?? "")
+        .order("created_at", { ascending: false }),
+    [jobId]
+  );
+}
+
 export async function createJob(job: {
   title: string;
   department: string;
@@ -64,12 +83,110 @@ export async function createJob(job: {
   description: string;
   target_skills: string[];
   recruiter_id: string;
+  openings?: number;
 }) {
   return supabase.from("jobs").insert(job).select().single();
 }
 
 export async function updateJob(id: string, updates: Record<string, unknown>) {
-  return supabase.from("jobs").update(updates).eq("id", id);
+  const res = await fetch(`/api/jobs/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(updates),
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    return { error: body.error ?? "Update failed" };
+  }
+  return { error: null };
+}
+
+export async function deleteJob(id: string) {
+  const res = await fetch(`/api/jobs/${id}`, { method: "DELETE" });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    return { error: body.error ?? "Delete failed" };
+  }
+  return { error: null };
+}
+
+// ── Applications ──
+export function useApplications(jobId?: string) {
+  return useSupabaseQuery(
+    () =>
+      supabase
+        .from("applications")
+        .select("*, profiles!candidate_id(name, email)")
+        .eq("job_id", jobId ?? "")
+        .order("applied_at", { ascending: false }),
+    [jobId]
+  );
+}
+
+export function useCandidateApplications(userId?: string) {
+  return useSupabaseQuery(
+    () =>
+      supabase
+        .from("applications")
+        .select("*, jobs(id, title, department, type, status, target_skills)")
+        .eq("candidate_id", userId ?? "")
+        .order("applied_at", { ascending: false }),
+    [userId]
+  );
+}
+
+export async function createApplication(jobId: string, candidateId: string, coverNote?: string) {
+  const res = await fetch("/api/applications", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ job_id: jobId, candidate_id: candidateId, cover_note: coverNote }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) return { data: null, error: body.error ?? "Failed to apply" };
+  return { data: body, error: null };
+}
+
+export async function updateApplicationStatus(id: string, status: string) {
+  const res = await fetch(`/api/applications/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ status }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) return { error: body.error ?? "Update failed" };
+  return { error: null, data: body };
+}
+
+export async function createInterview(applicationId: string, candidateId: string, jobId: string) {
+  const res = await fetch("/api/applications/enable-test", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ application_id: applicationId, candidate_id: candidateId, job_id: jobId }),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) return { data: null, error: body.error ?? "Failed to enable test" };
+  return { data: body, error: null };
+}
+
+// ── Job Questions ──
+export function useJobQuestions(jobId?: string) {
+  return useSupabaseQuery(
+    () =>
+      supabase
+        .from("job_questions")
+        .select("*, questions(*)")
+        .eq("job_id", jobId ?? "")
+        .order("order_index", { ascending: true }),
+    [jobId]
+  );
+}
+
+export async function addJobQuestion(jobId: string, questionId: string, orderIndex: number) {
+  return supabase.from("job_questions").insert({ job_id: jobId, question_id: questionId, order_index: orderIndex });
+}
+
+export async function removeJobQuestion(jobId: string, questionId: string) {
+  return supabase.from("job_questions").delete().eq("job_id", jobId).eq("question_id", questionId);
 }
 
 // ── Open Jobs (for candidates) ──
@@ -126,7 +243,7 @@ export async function applyToJob(jobId: string, candidateId: string) {
         .select("applicants_count")
         .eq("id", jobId)
         .single()
-        .then(({ data: job }) => {
+        .then(({ data: job }: { data: any }) => {
           if (job) {
             supabase
               .from("jobs")
