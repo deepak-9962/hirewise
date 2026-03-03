@@ -27,32 +27,39 @@ export default function SignupPage() {
       return;
     }
 
-    const { error: authError } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { name, role },
-      },
-    });
+    try {
+      const { error: authError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { name, role },
+        },
+      });
 
-    if (authError) {
-      setError(authError.message);
+      if (authError) {
+        setError(authError.message);
+        setLoading(false);
+        return;
+      }
+
+      setSuccess(true);
       setLoading(false);
-      return;
+
+      // Auto-redirect after short delay
+      setTimeout(() => {
+        const dashboardMap: Record<string, string> = {
+          candidate: "/candidate/dashboard",
+          recruiter: "/recruiter/dashboard",
+        };
+        router.push(dashboardMap[role] || "/candidate/dashboard");
+        router.refresh();
+      }, 1500);
+    } catch (err) {
+      console.error("Signup error:", err);
+      setError("Unable to connect to the server. Please check your internet connection and try again.");
+    } finally {
+      setLoading(false);
     }
-
-    setSuccess(true);
-    setLoading(false);
-
-    // Auto-redirect after short delay
-    setTimeout(() => {
-      const dashboardMap: Record<string, string> = {
-        candidate: "/candidate/dashboard",
-        recruiter: "/recruiter/dashboard",
-      };
-      router.push(dashboardMap[role] || "/candidate/dashboard");
-      router.refresh();
-    }, 1500);
   };
 
   return (

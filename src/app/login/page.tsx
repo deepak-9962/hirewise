@@ -21,38 +21,45 @@ function LoginForm() {
     setError("");
     setLoading(true);
 
-    const { data, error: authError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    try {
+      const { data, error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-    if (authError) {
-      setError(authError.message);
-      setLoading(false);
-      return;
-    }
-
-    if (data.user) {
-      if (redirectTo) {
-        router.push(redirectTo);
-      } else {
-        const { data: profile } = await supabase
-          .from("profiles")
-          .select("role")
-          .eq("id", data.user.id)
-          .single();
-
-        const role = profile?.role || "candidate";
-        const dashboardMap: Record<string, string> = {
-          candidate: "/candidate/dashboard",
-          recruiter: "/recruiter/dashboard",
-          admin: "/admin/dashboard",
-        };
-        router.push(dashboardMap[role] || "/candidate/dashboard");
+      if (authError) {
+        setError(authError.message);
+        setLoading(false);
+        return;
       }
-    }
 
-    router.refresh();
+      if (data.user) {
+        if (redirectTo) {
+          router.push(redirectTo);
+        } else {
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("role")
+            .eq("id", data.user.id)
+            .single();
+
+          const role = profile?.role || "candidate";
+          const dashboardMap: Record<string, string> = {
+            candidate: "/candidate/dashboard",
+            recruiter: "/recruiter/dashboard",
+            admin: "/admin/dashboard",
+          };
+          router.push(dashboardMap[role] || "/candidate/dashboard");
+        }
+      }
+
+      router.refresh();
+    } catch (err) {
+      console.error("Login error:", err);
+      setError("Unable to connect to the server. Please check your internet connection and try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

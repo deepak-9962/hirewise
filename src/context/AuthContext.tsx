@@ -58,7 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      async (_event: string, session: Session | null) => {
         setSession(session);
         setUser(session?.user ?? null);
         if (session?.user) {
@@ -71,7 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
 
     // Initial session check
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session } }: { data: { session: Session | null } }) => {
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, use } from "react";
 import dynamic from "next/dynamic";
+import { useAuth } from "@/context/AuthContext";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
 
@@ -79,8 +80,11 @@ const mockQuestions: Question[] = [
   },
 ];
 
-export default function InterviewSessionPage() {
+export default function InterviewSessionPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id: interviewId } = use(params);
+  const { user } = useAuth();
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [saving, setSaving] = useState(false);
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const [codeOutputs, setCodeOutputs] = useState<Record<number, string>>({});
   const [timeLeft, setTimeLeft] = useState(mockQuestions[0].timeLimit);
@@ -166,6 +170,28 @@ export default function InterviewSessionPage() {
         const data = await res.json();
         if (data.success) {
           setFinalReport(data.report);
+
+          // Save everything to Supabase
+          setSaving(true);
+          try {
+            await fetch("/api/interview/save", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                interviewId: interviewId,
+                candidateId: user?.id,
+                jobTitle: "Technical Interview",
+                questions: mockQuestions,
+                answers,
+                evaluations,
+                finalReport: data.report,
+              }),
+            });
+          } catch (saveErr) {
+            console.error("Failed to save interview results:", saveErr);
+          } finally {
+            setSaving(false);
+          }
         }
       } catch (err) {
         console.error("Report generation failed:", err);
@@ -318,6 +344,13 @@ export default function InterviewSessionPage() {
             <p className="text-slate-500 dark:text-slate-400 mb-8">
               Your responses have been submitted for AI evaluation. You&apos;ll receive a detailed report shortly.
             </p>
+          )}
+
+          {saving && (
+            <div className="flex items-center justify-center gap-2 text-sm text-slate-500 mt-4">
+              <span className="animate-spin material-symbols-outlined text-primary text-sm">progress_activity</span>
+              Saving results to your dashboard...
+            </div>
           )}
 
           <a href="/candidate/dashboard" className="bg-primary text-white px-8 py-3 rounded-xl font-bold hover:bg-blue-700 transition-all inline-block mt-8">
