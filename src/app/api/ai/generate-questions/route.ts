@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import { generateQuestions } from "@/lib/gemini";
 
 function buildFallbackQuestions(jobTitle: string, skills: string[], count: number) {
   const skillList = skills.length ? skills : ["General Software Engineering"];
@@ -46,13 +47,12 @@ export async function POST(req: NextRequest) {
     .limit(1)
     .single();
 
-  // Generate questions via Gemini, fallback to templates on quota/error
+  // Generate questions via Ollama/Mistral (ai-engine), fallback to templates
   let generated: any[];
   try {
-    const { generateQuestions } = await import("@/lib/gemini");
     generated = await generateQuestions(job_title, skills ?? [], count);
   } catch (aiErr: any) {
-    console.warn("[generate-questions] Gemini unavailable, using fallback templates:", aiErr?.message);
+    console.warn("[generate-questions] AI unavailable, using fallback templates:", aiErr?.message);
     generated = buildFallbackQuestions(job_title, skills ?? [], count);
   }
 
