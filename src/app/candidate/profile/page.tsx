@@ -47,15 +47,19 @@ export default function CandidateProfilePage() {
 
   const memberSince = user?.created_at
     ? new Date(user.created_at).toLocaleDateString("en-US", {
-        month: "short",
-        year: "numeric",
-      })
+      month: "short",
+      year: "numeric",
+    })
     : "";
 
   const handleProfileSave = async (data: Partial<CandidateProfile>) => {
     const res = await updateProfile(data);
     if (!res.error) {
-      await refreshAuthProfile();
+      try {
+        await refreshAuthProfile();
+      } catch (e) {
+        console.error("Failed to refresh auth profile:", e);
+      }
       setSuccessMsg("Profile updated successfully!");
       setTimeout(() => setSuccessMsg(""), 4000);
     }

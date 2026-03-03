@@ -74,15 +74,20 @@ export default function ProfileEditForm({
     }
 
     setSaving(true);
-    const res = await onSave(parsed.data);
-    setSaving(false);
+    try {
+      const res = await onSave(parsed.data);
 
-    if (res.error) {
-      setErrors({ _form: res.error });
-      return;
+      if (res.error) {
+        setErrors({ _form: res.error });
+        return;
+      }
+
+      onCancel(); // Exit edit mode on success
+    } catch (e) {
+      setErrors({ _form: e instanceof Error ? e.message : "Failed to save" });
+    } finally {
+      setSaving(false);
     }
-
-    onCancel(); // Exit edit mode on success
   };
 
   const nameParts = form.name.split(" ");

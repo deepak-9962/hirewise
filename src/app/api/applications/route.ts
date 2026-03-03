@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
+import { createClient } from "@/lib/supabase-server";
 
 // GET /api/applications?job_id=xxx  OR  ?candidate_id=xxx
 export async function GET(req: NextRequest) {
@@ -7,10 +7,29 @@ export async function GET(req: NextRequest) {
   const jobId = searchParams.get("job_id");
   const candidateId = searchParams.get("candidate_id");
 
-  const admin = getSupabaseAdmin();
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  // Try admin client for cross-user queries (recruiter viewing all applications for a job)
+  let client = supabase;
+  if (jobId) {
+    try {
+      const { getSupabaseAdmin } = await import("@/lib/supabaseAdmin");
+      client = getSupabaseAdmin();
+    } catch {
+      // Admin client not available; fall back to auth client
+    }
+  }
 
   if (jobId) {
-    const { data, error } = await admin
+    const { data, error } = await client
       .from("applications")
       .select("*, profiles!candidate_id(name, email)")
       .eq("job_id", jobId)
@@ -20,7 +39,7 @@ export async function GET(req: NextRequest) {
   }
 
   if (candidateId) {
-    const { data, error } = await admin
+    const { data, error } = await supabase
       .from("applications")
       .select("*, jobs(id, title, department, type, status, target_skills)")
       .eq("candidate_id", candidateId)
@@ -34,27 +53,27 @@ export async function GET(req: NextRequest) {
 
 // POST /api/applications  — candidate applies
 export async function POST(req: NextRequest) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const body = await req.json();
-  const { job_id, candidate_id, cover_note } = body;
+  const { job_id, cover_note } = body;
 
-  if (!job_id || !candidate_id) {
-    return NextResponse.json({ error: "job_id and candidate_id required" }, { status: 400 });
+  if (!job_id) {
+    return NextResponse.json({ error: "job_id is required" }, { status: 400 });
   }
 
-  const admin = getSupabaseAdmin();
+  // Use the authenticated user's ID (don't trust client-sent candidate_id)
+  const candidate_id = user.id;
 
-  // Ensure candidate profile exists
-  const { data: profile } = await admin
-    .from("profiles")
-    .select("id")
-    .eq("id", candidate_id)
-    .single();
-
-  if (!profile) {
-    return NextResponse.json({ error: "Candidate profile not found" }, { status: 404 });
-  }
-
-  const { data, error } = await admin
+  const { data, error } = await supabase
     .from("applications")
     .insert({ job_id, candidate_id, cover_note, status: "applied" })
     .select()
@@ -69,3 +88,4 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json(data, { status: 201 });
 }
+
