@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useAuth } from "@/context/AuthContext";
+import { useTheme } from "@/context/ThemeContext";
 
 interface NavItem {
   label: string;
@@ -39,7 +41,16 @@ const navItems: Record<string, NavItem[]> = {
 
 export default function Sidebar({ role }: SidebarProps) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { profile, signOut } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const items = navItems[role] || [];
+
+  const handleSignOut = async () => {
+    await signOut();
+    router.push("/login");
+    router.refresh();
+  };
 
   return (
     <aside className="w-64 h-screen sticky top-0 bg-white dark:bg-background-dark border-r border-slate-200 dark:border-slate-800 flex flex-col">
@@ -72,6 +83,19 @@ export default function Sidebar({ role }: SidebarProps) {
         })}
       </nav>
 
+      {/* Theme toggle */}
+      <div className="px-3 pb-2">
+        <button
+          onClick={toggleTheme}
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all"
+        >
+          <span className="material-symbols-outlined text-xl">
+            {theme === "dark" ? "light_mode" : "dark_mode"}
+          </span>
+          {theme === "dark" ? "Light Mode" : "Dark Mode"}
+        </button>
+      </div>
+
       {/* Bottom section */}
       <div className="p-4 border-t border-slate-200 dark:border-slate-800">
         <div className="flex items-center gap-3 px-3 py-2">
@@ -80,13 +104,13 @@ export default function Sidebar({ role }: SidebarProps) {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
-              {role === "candidate" ? "John Doe" : role === "recruiter" ? "Sarah Miller" : "Admin User"}
+              {profile?.name || (role === "candidate" ? "Candidate" : role === "recruiter" ? "Recruiter" : "Admin")}
             </p>
             <p className="text-xs text-slate-500 capitalize">{role}</p>
           </div>
-          <Link href="/login" className="text-slate-400 hover:text-red-500 transition-colors">
+          <button onClick={handleSignOut} className="text-slate-400 hover:text-red-500 transition-colors">
             <span className="material-symbols-outlined text-xl">logout</span>
-          </Link>
+          </button>
         </div>
       </div>
     </aside>

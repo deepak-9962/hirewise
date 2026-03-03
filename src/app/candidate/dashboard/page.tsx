@@ -1,36 +1,39 @@
 "use client";
 
 import Link from "next/link";
-
-const upcomingInterviews = [
-  { id: 1, job: "Senior Frontend Engineer", company: "TechCorp", date: "Mar 5, 2026", time: "10:00 AM", status: "scheduled" },
-  { id: 2, job: "Full Stack Developer", company: "Nexus Labs", date: "Mar 8, 2026", time: "2:00 PM", status: "scheduled" },
-];
-
-const pastInterviews = [
-  { id: 3, job: "React Developer", company: "Velocity Inc.", date: "Feb 28, 2026", score: 87, status: "completed" },
-  { id: 4, job: "Software Engineer", company: "Vertex AI", date: "Feb 20, 2026", score: 92, status: "completed" },
-  { id: 5, job: "Frontend Architect", company: "SecureTech", date: "Feb 12, 2026", score: 78, status: "completed" },
-];
-
-const skills = ["React", "TypeScript", "Node.js", "Python", "System Design", "SQL", "Docker", "AWS"];
+import { useAuth } from "@/context/AuthContext";
+import { useCandidateInterviews, useCandidateReports } from "@/hooks/useSupabase";
 
 export default function CandidateDashboard() {
+  const { user, profile } = useAuth();
+  const { data: interviews, loading: interviewsLoading } = useCandidateInterviews(user?.id);
+  const { data: reports, loading: reportsLoading } = useCandidateReports(user?.id);
+
+  const allInterviews = (interviews as Record<string, unknown>[] | null) || [];
+  const upcoming = allInterviews.filter((i) => i.status === "scheduled");
+  const completed = allInterviews.filter((i) => i.status === "completed");
+  const allReports = (reports as Record<string, unknown>[] | null) || [];
+  const avgScore = completed.length > 0
+    ? Math.round(completed.reduce((sum, i) => sum + (Number(i.score) || 0), 0) / completed.length * 10) / 10
+    : 0;
+  const skills = profile?.skills || [];
+
+  const isLoading = interviewsLoading || reportsLoading;
   return (
     <div className="animate-fade-in">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Welcome back, John</h1>
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Welcome back, {profile?.name?.split(" ")[0] || "there"}</h1>
         <p className="text-slate-500 dark:text-slate-400 mt-1">Here&#39;s an overview of your interview activity</p>
       </div>
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         {[
-          { label: "Total Interviews", value: "7", icon: "videocam", color: "text-primary", bg: "bg-primary/10" },
-          { label: "Average Score", value: "85.7", icon: "trending_up", color: "text-green-600", bg: "bg-green-50" },
-          { label: "Upcoming", value: "2", icon: "event", color: "text-amber-600", bg: "bg-amber-50" },
-          { label: "Reports Ready", value: "5", icon: "description", color: "text-purple-600", bg: "bg-purple-50" },
+          { label: "Total Interviews", value: String(allInterviews.length), icon: "videocam", color: "text-primary", bg: "bg-primary/10" },
+          { label: "Average Score", value: String(avgScore), icon: "trending_up", color: "text-green-600", bg: "bg-green-50" },
+          { label: "Upcoming", value: String(upcoming.length), icon: "event", color: "text-amber-600", bg: "bg-amber-50" },
+          { label: "Reports Ready", value: String(allReports.length), icon: "description", color: "text-purple-600", bg: "bg-purple-50" },
         ].map((stat) => (
           <div key={stat.label} className="bg-white dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 p-5">
             <div className="flex items-center justify-between mb-3">
@@ -54,23 +57,27 @@ export default function CandidateDashboard() {
               <Link href="/candidate/interviews" className="text-sm text-primary font-medium hover:underline">View all</Link>
             </div>
             <div className="divide-y divide-slate-100 dark:divide-slate-700">
-              {upcomingInterviews.map((interview) => (
-                <div key={interview.id} className="p-5 flex items-center justify-between">
+              {isLoading ? (
+                <div className="p-10 text-center text-slate-400">
+                  <span className="animate-spin material-symbols-outlined text-3xl">progress_activity</span>
+                  <p className="mt-2">Loading...</p>
+                </div>
+              ) : upcoming.length > 0 ? upcoming.map((interview) => (
+                <div key={String(interview.id)} className="p-5 flex items-center justify-between">
                   <div className="flex items-center gap-4">
                     <div className="size-12 rounded-xl bg-primary/10 flex items-center justify-center">
                       <span className="material-symbols-outlined text-primary">videocam</span>
                     </div>
                     <div>
-                      <p className="font-semibold text-slate-900 dark:text-white">{interview.job}</p>
-                      <p className="text-sm text-slate-500">{interview.company} · {interview.date} at {interview.time}</p>
+                      <p className="font-semibold text-slate-900 dark:text-white">{(interview.jobs as Record<string, string>)?.title || "Interview"}</p>
+                      <p className="text-sm text-slate-500">{new Date(String(interview.scheduled_at)).toLocaleDateString()}</p>
                     </div>
                   </div>
-                  <Link href={`/candidate/interviews/${interview.id}`} className="bg-primary text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-blue-700 transition-all">
+                  <Link href={`/interview/${interview.id}`} className="bg-primary text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-blue-700 transition-all">
                     Join
                   </Link>
                 </div>
-              ))}
-              {upcomingInterviews.length === 0 && (
+              )) : (
                 <div className="p-10 text-center text-slate-400">
                   <span className="material-symbols-outlined text-4xl mb-2">event_busy</span>
                   <p>No upcoming interviews</p>
@@ -97,21 +104,24 @@ export default function CandidateDashboard() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
-                  {pastInterviews.map((interview) => (
-                    <tr key={interview.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
-                      <td className="px-5 py-4 text-sm font-medium text-slate-900 dark:text-white">{interview.job}</td>
-                      <td className="px-5 py-4 text-sm text-slate-500">{interview.company}</td>
-                      <td className="px-5 py-4 text-sm text-slate-500">{interview.date}</td>
+                  {completed.map((interview) => (
+                    <tr key={String(interview.id)} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+                      <td className="px-5 py-4 text-sm font-medium text-slate-900 dark:text-white">{(interview.jobs as Record<string, string>)?.title || "Interview"}</td>
+                      <td className="px-5 py-4 text-sm text-slate-500">{(interview.jobs as Record<string, string>)?.department || "-"}</td>
+                      <td className="px-5 py-4 text-sm text-slate-500">{interview.completed_at ? new Date(String(interview.completed_at)).toLocaleDateString() : "-"}</td>
                       <td className="px-5 py-4">
-                        <span className={`text-sm font-bold ${interview.score >= 85 ? "text-green-600" : interview.score >= 70 ? "text-amber-600" : "text-red-500"}`}>
-                          {interview.score}/100
+                        <span className={`text-sm font-bold ${Number(interview.score) >= 85 ? "text-green-600" : Number(interview.score) >= 70 ? "text-amber-600" : "text-red-500"}`}>
+                          {String(interview.score ?? "-")}/100
                         </span>
                       </td>
                       <td className="px-5 py-4 text-right">
-                        <Link href={`/candidate/reports/${interview.id}`} className="text-sm text-primary font-medium hover:underline">View Report</Link>
+                        <Link href={`/candidate/reports`} className="text-sm text-primary font-medium hover:underline">View Report</Link>
                       </td>
                     </tr>
                   ))}
+                  {completed.length === 0 && (
+                    <tr><td colSpan={5} className="px-5 py-10 text-center text-slate-400">No completed interviews yet</td></tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -126,15 +136,17 @@ export default function CandidateDashboard() {
               <div className="size-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-3">
                 <span className="material-symbols-outlined text-primary text-3xl">person</span>
               </div>
-              <h3 className="font-bold text-slate-900 dark:text-white">John Doe</h3>
-              <p className="text-sm text-slate-500">john.doe@email.com</p>
+              <h3 className="font-bold text-slate-900 dark:text-white">{profile?.name || "User"}</h3>
+              <p className="text-sm text-slate-500">{profile?.email || user?.email}</p>
             </div>
             <div className="border-t border-slate-100 dark:border-slate-700 pt-4">
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3">Skills</p>
               <div className="flex flex-wrap gap-2">
-                {skills.map((skill) => (
+                {skills.length > 0 ? skills.map((skill) => (
                   <span key={skill} className="bg-primary/10 text-primary text-xs font-medium px-2.5 py-1 rounded-full">{skill}</span>
-                ))}
+                )) : (
+                  <p className="text-sm text-slate-400">No skills added yet</p>
+                )}
               </div>
             </div>
             <div className="mt-4 border-t border-slate-100 dark:border-slate-700 pt-4">
@@ -151,20 +163,22 @@ export default function CandidateDashboard() {
           <div className="bg-white dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 p-5">
             <h3 className="font-bold text-slate-900 dark:text-white mb-4">Score Trend</h3>
             <div className="space-y-3">
-              {pastInterviews.map((interview) => (
-                <div key={interview.id}>
+              {completed.length > 0 ? completed.slice(0, 5).map((interview) => (
+                <div key={String(interview.id)}>
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs text-slate-500 truncate mr-2">{interview.job}</span>
-                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300">{interview.score}%</span>
+                    <span className="text-xs text-slate-500 truncate mr-2">{(interview.jobs as Record<string, string>)?.title || "Interview"}</span>
+                    <span className="text-xs font-bold text-slate-700 dark:text-slate-300">{String(interview.score ?? 0)}%</span>
                   </div>
                   <div className="h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden">
                     <div
-                      className={`h-full rounded-full animate-progress ${interview.score >= 85 ? "bg-green-500" : interview.score >= 70 ? "bg-amber-500" : "bg-red-500"}`}
-                      style={{ width: `${interview.score}%` }}
+                      className={`h-full rounded-full animate-progress ${Number(interview.score) >= 85 ? "bg-green-500" : Number(interview.score) >= 70 ? "bg-amber-500" : "bg-red-500"}`}
+                      style={{ width: `${interview.score ?? 0}%` }}
                     ></div>
                   </div>
                 </div>
-              ))}
+              )) : (
+                <p className="text-sm text-slate-400 text-center py-4">No scores yet</p>
+              )}
             </div>
           </div>
         </div>

@@ -16,6 +16,22 @@ interface Question {
   starterCode?: string;
 }
 
+interface Evaluation {
+  score: number;
+  feedback: string;
+  strengths: string[];
+  improvements: string[];
+  // Descriptive-specific
+  technical?: number;
+  communication?: number;
+  reasoning?: number;
+  // Coding-specific
+  correctness?: number;
+  efficiency?: number;
+  codeQuality?: number;
+  executionResult?: string;
+}
+
 const mockQuestions: Question[] = [
   {
     id: 1,
@@ -72,6 +88,11 @@ export default function InterviewSessionPage() {
   const [showComplete, setShowComplete] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [selectedLanguage, setSelectedLanguage] = useState("javascript");
+  const [evaluations, setEvaluations] = useState<Record<number, Evaluation>>({});
+  const [evaluating, setEvaluating] = useState<Record<number, boolean>>({});
+  const [runningCode, setRunningCode] = useState(false);
+  const [generatingReport, setGeneratingReport] = useState(false);
+  const [finalReport, setFinalReport] = useState<Record<string, unknown> | null>(null);
 
   const currentQ = mockQuestions[currentIndex];
   const totalQuestions = mockQuestions.length;
@@ -94,23 +115,93 @@ export default function InterviewSessionPage() {
     setTimeLeft(mockQuestions[currentIndex].timeLimit);
   }, [currentIndex]);
 
-  const handleSubmit = useCallback(() => {
+  const handleSubmit = useCallback(async () => {
     setIsSubmitted((prev) => ({ ...prev, [currentQ.id]: true }));
-  }, [currentQ.id]);
+    setEvaluating((prev) => ({ ...prev, [currentQ.id]: true }));
 
-  const handleNext = () => {
+    try {
+      const res = await fetch("/api/ai/evaluate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          question: currentQ.text,
+          answer: answers[currentQ.id] || "",
+          type: currentQ.type,
+          skill: currentQ.skill,
+          difficulty: currentQ.difficulty,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setEvaluations((prev) => ({ ...prev, [currentQ.id]: data.evaluation }));
+      }
+    } catch (err) {
+      console.error("Evaluation failed:", err);
+    } finally {
+      setEvaluating((prev) => ({ ...prev, [currentQ.id]: false }));
+    }
+  }, [currentQ, answers]);
+
+  const handleNext = async () => {
     if (currentIndex < totalQuestions - 1) {
       setCurrentIndex(currentIndex + 1);
     } else {
+      // Generate final report
       setShowComplete(true);
+      setGeneratingReport(true);
+      try {
+        const questionsData = mockQuestions.map((q) => ({
+          question: q.text,
+          answer: answers[q.id] || "(No answer provided)",
+          type: q.type,
+          skill: q.skill,
+          difficulty: q.difficulty,
+          score: evaluations[q.id]?.score ?? 0,
+        }));
+        const res = await fetch("/api/ai/report", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ questions: questionsData }),
+        });
+        const data = await res.json();
+        if (data.success) {
+          setFinalReport(data.report);
+        }
+      } catch (err) {
+        console.error("Report generation failed:", err);
+      } finally {
+        setGeneratingReport(false);
+      }
     }
   };
 
-  const handleRunCode = () => {
-    setCodeOutputs((prev) => ({
-      ...prev,
-      [currentQ.id]: "▶ Running code...\n\n// Output will appear here after execution\n// (Sandboxed execution via Docker in production)",
-    }));
+  const handleRunCode = async () => {
+    setRunningCode(true);
+    setCodeOutputs((prev) => ({ ...prev, [currentQ.id]: "▶ Running code..." }));
+
+    try {
+      const res = await fetch("/api/ai/run-code", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code: answers[currentQ.id] || currentQ.starterCode || "",
+          language: selectedLanguage,
+        }),
+      });
+      const data = await res.json();
+      if (data.success !== undefined) {
+        const output = data.hasError
+          ? `❌ Error: ${data.errorMessage}\n\nExecution time: ${data.executionTime}`
+          : `✅ Output:\n${data.output}\n\nExecution time: ${data.executionTime}`;
+        setCodeOutputs((prev) => ({ ...prev, [currentQ.id]: output }));
+      } else {
+        setCodeOutputs((prev) => ({ ...prev, [currentQ.id]: `❌ ${data.error || "Execution failed"}` }));
+      }
+    } catch {
+      setCodeOutputs((prev) => ({ ...prev, [currentQ.id]: "❌ Failed to execute code. Check your connection." }));
+    } finally {
+      setRunningCode(false);
+    }
   };
 
   const formatTime = (seconds: number) => {
@@ -128,29 +219,108 @@ export default function InterviewSessionPage() {
   if (showComplete) {
     return (
       <div className="min-h-screen bg-background-light dark:bg-background-dark flex items-center justify-center p-4">
-        <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-12 text-center max-w-lg shadow-xl">
+        <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-8 sm:p-12 text-center max-w-2xl shadow-xl w-full">
           <div className="size-20 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-6">
             <span className="material-symbols-outlined text-green-600 text-4xl">check_circle</span>
           </div>
           <h1 className="text-3xl font-bold text-slate-900 dark:text-white mb-4">Interview Complete!</h1>
-          <p className="text-slate-500 dark:text-slate-400 mb-8">
-            Your responses have been submitted for AI evaluation. You&apos;ll receive a detailed report shortly.
-          </p>
-          <div className="grid grid-cols-3 gap-4 mb-8">
-            <div className="bg-slate-50 dark:bg-slate-700/50 rounded-lg p-3">
-              <p className="text-2xl font-bold text-slate-900 dark:text-white">{totalQuestions}</p>
-              <p className="text-xs text-slate-500">Questions</p>
+
+          {generatingReport ? (
+            <div className="py-8">
+              <div className="flex items-center justify-center gap-3 mb-4">
+                <span className="animate-spin material-symbols-outlined text-primary">progress_activity</span>
+                <span className="text-slate-500 font-medium">AI is generating your detailed report...</span>
+              </div>
+              <div className="w-48 h-2 bg-slate-200 dark:bg-slate-700 rounded-full mx-auto overflow-hidden">
+                <div className="h-full bg-primary rounded-full animate-progress" style={{ width: "80%" }}></div>
+              </div>
             </div>
-            <div className="bg-slate-50 dark:bg-slate-700/50 rounded-lg p-3">
-              <p className="text-2xl font-bold text-slate-900 dark:text-white">{Object.keys(isSubmitted).length}</p>
-              <p className="text-xs text-slate-500">Answered</p>
+          ) : finalReport ? (
+            <div className="text-left mt-6 space-y-6">
+              {/* Score Overview */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-4 text-center">
+                  <p className="text-3xl font-black text-primary">{String(finalReport.overallScore ?? 0)}</p>
+                  <p className="text-xs text-slate-500 mt-1">Overall</p>
+                </div>
+                <div className="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-4 text-center">
+                  <p className="text-3xl font-black text-blue-600">{String(finalReport.technicalScore ?? 0)}</p>
+                  <p className="text-xs text-slate-500 mt-1">Technical</p>
+                </div>
+                <div className="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-4 text-center">
+                  <p className="text-3xl font-black text-emerald-600">{String(finalReport.communicationScore ?? 0)}</p>
+                  <p className="text-xs text-slate-500 mt-1">Communication</p>
+                </div>
+                <div className="bg-slate-50 dark:bg-slate-700/50 rounded-xl p-4 text-center">
+                  <p className="text-3xl font-black text-amber-600">{String(finalReport.reasoningScore ?? 0)}</p>
+                  <p className="text-xs text-slate-500 mt-1">Reasoning</p>
+                </div>
+              </div>
+
+              {/* Summary */}
+              <div className="bg-slate-50 dark:bg-slate-700/30 rounded-xl p-4">
+                <h3 className="font-bold text-slate-900 dark:text-white mb-2 flex items-center gap-2">
+                  <span className="material-symbols-outlined text-primary text-lg">smart_toy</span> AI Assessment
+                </h3>
+                <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">{String(finalReport.summary ?? "")}</p>
+              </div>
+
+              {/* Strengths & Weaknesses */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="bg-green-50 dark:bg-green-900/10 rounded-xl p-4 border border-green-200 dark:border-green-800">
+                  <h3 className="font-bold text-green-700 dark:text-green-400 mb-2 text-sm">Strengths</h3>
+                  <ul className="space-y-1.5">
+                    {(finalReport.strengths as string[] || []).map((s: string, i: number) => (
+                      <li key={i} className="text-sm text-green-600 dark:text-green-300 flex items-start gap-2">
+                        <span className="material-symbols-outlined text-xs mt-0.5">check</span> {s}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="bg-amber-50 dark:bg-amber-900/10 rounded-xl p-4 border border-amber-200 dark:border-amber-800">
+                  <h3 className="font-bold text-amber-700 dark:text-amber-400 mb-2 text-sm">Areas to Improve</h3>
+                  <ul className="space-y-1.5">
+                    {(finalReport.weaknesses as string[] || []).map((w: string, i: number) => (
+                      <li key={i} className="text-sm text-amber-600 dark:text-amber-300 flex items-start gap-2">
+                        <span className="material-symbols-outlined text-xs mt-0.5">arrow_forward</span> {w}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+
+              {/* Recommendation */}
+              <div className="bg-primary/5 rounded-xl p-4 border border-primary/20">
+                <h3 className="font-bold text-primary mb-1 text-sm">Recommendation</h3>
+                <p className="text-sm text-slate-700 dark:text-slate-300">{String(finalReport.recommendation ?? "")}</p>
+              </div>
+
+              {/* Per-question scores */}
+              <div>
+                <h3 className="font-bold text-slate-900 dark:text-white mb-3 text-sm">Question-by-Question Scores</h3>
+                <div className="space-y-2">
+                  {mockQuestions.map((q, i) => (
+                    <div key={q.id} className="flex items-center gap-3">
+                      <span className="text-xs font-bold text-slate-400 w-6">Q{i + 1}</span>
+                      <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${(evaluations[q.id]?.score ?? 0) >= 80 ? "bg-green-500" : (evaluations[q.id]?.score ?? 0) >= 60 ? "bg-amber-500" : "bg-red-500"}`}
+                          style={{ width: `${evaluations[q.id]?.score ?? 0}%` }}
+                        ></div>
+                      </div>
+                      <span className="text-xs font-bold text-slate-600 dark:text-slate-300 w-10 text-right">{evaluations[q.id]?.score ?? "-"}/100</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
-            <div className="bg-slate-50 dark:bg-slate-700/50 rounded-lg p-3">
-              <p className="text-2xl font-bold text-primary">AI</p>
-              <p className="text-xs text-slate-500">Evaluating</p>
-            </div>
-          </div>
-          <a href="/candidate/dashboard" className="bg-primary text-white px-8 py-3 rounded-xl font-bold hover:bg-blue-700 transition-all inline-block">
+          ) : (
+            <p className="text-slate-500 dark:text-slate-400 mb-8">
+              Your responses have been submitted for AI evaluation. You&apos;ll receive a detailed report shortly.
+            </p>
+          )}
+
+          <a href="/candidate/dashboard" className="bg-primary text-white px-8 py-3 rounded-xl font-bold hover:bg-blue-700 transition-all inline-block mt-8">
             Back to Dashboard
           </a>
         </div>
@@ -277,16 +447,114 @@ export default function InterviewSessionPage() {
                   <span className="text-sm font-medium text-slate-500">Output Console</span>
                   <button
                     onClick={handleRunCode}
-                    disabled={isSubmitted[currentQ.id]}
+                    disabled={isSubmitted[currentQ.id] || runningCode}
                     className="bg-green-600 text-white text-xs font-semibold px-3 py-1.5 rounded-md hover:bg-green-700 transition-all flex items-center gap-1 disabled:opacity-50"
                   >
-                    <span className="material-symbols-outlined text-sm">play_arrow</span> Run Code
+                    {runningCode ? (
+                      <><span className="animate-spin material-symbols-outlined text-sm">progress_activity</span> Running...</>
+                    ) : (
+                      <><span className="material-symbols-outlined text-sm">play_arrow</span> Run Code</>
+                    )}
                   </button>
                 </div>
                 <div className="flex-1 h-80 bg-slate-900 p-4 font-mono text-sm text-green-400 overflow-auto">
                   {codeOutputs[currentQ.id] || "// Click 'Run Code' to execute..."}
                 </div>
               </div>
+            </div>
+          )}
+
+          {/* AI Evaluation Feedback */}
+          {(evaluating[currentQ.id] || evaluations[currentQ.id]) && (
+            <div className="mt-4 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden animate-fade-in">
+              <div className="p-4 border-b border-slate-100 dark:border-slate-700 flex items-center gap-2">
+                <span className="material-symbols-outlined text-primary text-lg">smart_toy</span>
+                <span className="text-sm font-bold text-slate-900 dark:text-white">AI Evaluation</span>
+                {evaluating[currentQ.id] && (
+                  <span className="animate-spin material-symbols-outlined text-primary text-sm ml-auto">progress_activity</span>
+                )}
+              </div>
+              {evaluating[currentQ.id] ? (
+                <div className="p-6 text-center">
+                  <p className="text-sm text-slate-500">Gemini is analyzing your response...</p>
+                  <div className="flex gap-1 justify-center mt-3">
+                    <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "0ms" }}></div>
+                    <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "150ms" }}></div>
+                    <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "300ms" }}></div>
+                  </div>
+                </div>
+              ) : evaluations[currentQ.id] ? (
+                <div className="p-4 space-y-4">
+                  {/* Score */}
+                  <div className="flex items-center gap-4">
+                    <div className={`text-3xl font-black ${evaluations[currentQ.id].score >= 80 ? "text-green-600" : evaluations[currentQ.id].score >= 60 ? "text-amber-600" : "text-red-500"}`}>
+                      {evaluations[currentQ.id].score}/100
+                    </div>
+                    <div className="flex-1 h-3 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full animate-progress ${evaluations[currentQ.id].score >= 80 ? "bg-green-500" : evaluations[currentQ.id].score >= 60 ? "bg-amber-500" : "bg-red-500"}`}
+                        style={{ width: `${evaluations[currentQ.id].score}%` }}
+                      ></div>
+                    </div>
+                  </div>
+
+                  {/* Sub-scores */}
+                  {currentQ.type === "coding" ? (
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="bg-slate-50 dark:bg-slate-700/30 rounded-lg p-3 text-center">
+                        <p className="text-lg font-bold text-slate-900 dark:text-white">{evaluations[currentQ.id].correctness ?? "-"}</p>
+                        <p className="text-xs text-slate-500">Correctness</p>
+                      </div>
+                      <div className="bg-slate-50 dark:bg-slate-700/30 rounded-lg p-3 text-center">
+                        <p className="text-lg font-bold text-slate-900 dark:text-white">{evaluations[currentQ.id].efficiency ?? "-"}</p>
+                        <p className="text-xs text-slate-500">Efficiency</p>
+                      </div>
+                      <div className="bg-slate-50 dark:bg-slate-700/30 rounded-lg p-3 text-center">
+                        <p className="text-lg font-bold text-slate-900 dark:text-white">{evaluations[currentQ.id].codeQuality ?? "-"}</p>
+                        <p className="text-xs text-slate-500">Code Quality</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-3 gap-3">
+                      <div className="bg-slate-50 dark:bg-slate-700/30 rounded-lg p-3 text-center">
+                        <p className="text-lg font-bold text-slate-900 dark:text-white">{evaluations[currentQ.id].technical ?? "-"}</p>
+                        <p className="text-xs text-slate-500">Technical</p>
+                      </div>
+                      <div className="bg-slate-50 dark:bg-slate-700/30 rounded-lg p-3 text-center">
+                        <p className="text-lg font-bold text-slate-900 dark:text-white">{evaluations[currentQ.id].communication ?? "-"}</p>
+                        <p className="text-xs text-slate-500">Communication</p>
+                      </div>
+                      <div className="bg-slate-50 dark:bg-slate-700/30 rounded-lg p-3 text-center">
+                        <p className="text-lg font-bold text-slate-900 dark:text-white">{evaluations[currentQ.id].reasoning ?? "-"}</p>
+                        <p className="text-xs text-slate-500">Reasoning</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Feedback */}
+                  <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed">{evaluations[currentQ.id].feedback}</p>
+
+                  {/* Strengths & Improvements */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-xs font-bold text-green-600 mb-1">Strengths</p>
+                      {evaluations[currentQ.id].strengths?.map((s, i) => (
+                        <p key={i} className="text-xs text-slate-500 flex items-start gap-1 mb-0.5">
+                          <span className="text-green-500 text-xs">✓</span> {s}
+                        </p>
+                      ))}
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-amber-600 mb-1">Improvements</p>
+                      {evaluations[currentQ.id].improvements?.map((s, i) => (
+                        <p key={i} className="text-xs text-slate-500 flex items-start gap-1 mb-0.5">
+                          <span className="text-amber-500 text-xs">→</span> {s}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : null}
             </div>
           )}
 

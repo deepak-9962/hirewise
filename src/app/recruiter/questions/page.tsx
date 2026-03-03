@@ -1,17 +1,8 @@
 "use client";
 
 import { useState } from "react";
-
-const questions = [
-  { id: 1, text: "Explain the difference between useEffect and useLayoutEffect.", skill: "React", difficulty: "Easy", type: "descriptive" },
-  { id: 2, text: "Implement a function to find the longest increasing subsequence.", skill: "Algorithms", difficulty: "Medium", type: "coding" },
-  { id: 3, text: "Design a real-time notification system for millions of users.", skill: "System Design", difficulty: "Hard", type: "descriptive" },
-  { id: 4, text: "Implement an LRU Cache with O(1) operations.", skill: "Data Structures", difficulty: "Hard", type: "coding" },
-  { id: 5, text: "What are the key differences between REST and GraphQL?", skill: "Backend", difficulty: "Easy", type: "descriptive" },
-  { id: 6, text: "Write a function to validate a balanced parentheses string.", skill: "Algorithms", difficulty: "Easy", type: "coding" },
-  { id: 7, text: "Explain the CAP theorem and its implications.", skill: "System Design", difficulty: "Medium", type: "descriptive" },
-  { id: 8, text: "Implement a debounce function from scratch.", skill: "JavaScript", difficulty: "Medium", type: "coding" },
-];
+import { useQuestions, createQuestion, deleteQuestion } from "@/hooks/useSupabase";
+import { useAuth } from "@/context/AuthContext";
 
 const difficultyColor: Record<string, string> = {
   Easy: "bg-green-100 text-green-700",
@@ -20,10 +11,40 @@ const difficultyColor: Record<string, string> = {
 };
 
 export default function QuestionBankPage() {
+  const { user } = useAuth();
   const [showAdd, setShowAdd] = useState(false);
   const [filter, setFilter] = useState("all");
+  const { data: questionsData, loading, refetch } = useQuestions(filter);
+  const [submitting, setSubmitting] = useState(false);
+  const [qForm, setQForm] = useState({ text: "", type: "descriptive", skill: "", difficulty: "Easy", test_cases: "" });
 
-  const filtered = filter === "all" ? questions : questions.filter((q) => q.type === filter);
+  const questions = (questionsData ?? []) as any[];
+
+  const handleAdd = async () => {
+    if (!qForm.text.trim() || !user) return;
+    setSubmitting(true);
+    let parsedTestCases: unknown = undefined;
+    if (qForm.test_cases.trim()) {
+      try { parsedTestCases = JSON.parse(qForm.test_cases); } catch { /* ignore */ }
+    }
+    await createQuestion({
+      text: qForm.text,
+      type: qForm.type,
+      skill: qForm.skill,
+      difficulty: qForm.difficulty,
+      test_cases: parsedTestCases,
+      created_by: user.id,
+    });
+    setQForm({ text: "", type: "descriptive", skill: "", difficulty: "Easy", test_cases: "" });
+    setSubmitting(false);
+    setShowAdd(false);
+    refetch();
+  };
+
+  const handleDelete = async (id: string) => {
+    await deleteQuestion(id);
+    refetch();
+  };
 
   return (
     <div className="animate-fade-in">
@@ -47,23 +68,23 @@ export default function QuestionBankPage() {
           <div className="space-y-4">
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Question Text</label>
-              <textarea className="w-full px-3 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/50 h-24 resize-none" placeholder="Enter the question text..."></textarea>
+              <textarea value={qForm.text} onChange={(e) => setQForm({ ...qForm, text: e.target.value })} className="w-full px-3 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/50 h-24 resize-none" placeholder="Enter the question text..."></textarea>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Type</label>
-                <select className="w-full px-3 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/50">
+                <select value={qForm.type} onChange={(e) => setQForm({ ...qForm, type: e.target.value })} className="w-full px-3 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/50">
                   <option value="descriptive">Descriptive</option>
                   <option value="coding">Coding</option>
                 </select>
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Skill Tag</label>
-                <input type="text" className="w-full px-3 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/50" placeholder="e.g. React, Algorithms" />
+                <input type="text" value={qForm.skill} onChange={(e) => setQForm({ ...qForm, skill: e.target.value })} className="w-full px-3 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/50" placeholder="e.g. React, Algorithms" />
               </div>
               <div>
                 <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Difficulty</label>
-                <select className="w-full px-3 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/50">
+                <select value={qForm.difficulty} onChange={(e) => setQForm({ ...qForm, difficulty: e.target.value })} className="w-full px-3 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/50">
                   <option value="Easy">Easy</option>
                   <option value="Medium">Medium</option>
                   <option value="Hard">Hard</option>
@@ -72,11 +93,11 @@ export default function QuestionBankPage() {
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">Test Cases (JSON) — for coding questions</label>
-              <textarea className="w-full px-3 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/50 h-20 resize-none font-mono" placeholder='[{"input": [1,2,3], "expected": 6}]'></textarea>
+              <textarea value={qForm.test_cases} onChange={(e) => setQForm({ ...qForm, test_cases: e.target.value })} className="w-full px-3 py-2.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-primary/50 h-20 resize-none font-mono" placeholder='[{"input": [1,2,3], "expected": 6}]'></textarea>
             </div>
             <div className="flex justify-end gap-3">
               <button onClick={() => setShowAdd(false)} className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-all">Cancel</button>
-              <button className="bg-primary text-white px-6 py-2 rounded-lg text-sm font-bold hover:bg-blue-700 transition-all">Add Question</button>
+              <button onClick={handleAdd} disabled={submitting} className="bg-primary text-white px-6 py-2 rounded-lg text-sm font-bold hover:bg-blue-700 transition-all disabled:opacity-50">{submitting ? "Adding..." : "Add Question"}</button>
             </div>
           </div>
         </div>
@@ -92,39 +113,50 @@ export default function QuestionBankPage() {
               filter === f ? "bg-primary text-white" : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700"
             }`}
           >
-            {f === "all" ? "All" : f.charAt(0).toUpperCase() + f.slice(1)} ({f === "all" ? questions.length : questions.filter((q) => q.type === f).length})
+            {f === "all" ? "All" : f.charAt(0).toUpperCase() + f.slice(1)}{filter === f ? ` (${questions.length})` : ""}
           </button>
         ))}
       </div>
 
       {/* Questions List */}
-      <div className="space-y-3">
-        {filtered.map((q) => (
-          <div key={q.id} className="bg-white dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 p-5 flex items-center justify-between hover:border-primary/50 transition-all">
-            <div className="flex items-start gap-4 flex-1">
-              <div className={`size-10 rounded-lg flex items-center justify-center ${q.type === "coding" ? "bg-purple-100 text-purple-600" : "bg-blue-100 text-blue-600"}`}>
-                <span className="material-symbols-outlined text-sm">{q.type === "coding" ? "code" : "description"}</span>
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-semibold text-slate-900 dark:text-white mb-1">{q.text}</p>
-                <div className="flex items-center gap-2">
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${difficultyColor[q.difficulty]}`}>{q.difficulty}</span>
-                  <span className="text-[10px] font-medium bg-slate-100 dark:bg-slate-700 text-slate-500 px-2 py-0.5 rounded-full">{q.skill}</span>
-                  <span className="text-[10px] font-medium bg-slate-100 dark:bg-slate-700 text-slate-500 px-2 py-0.5 rounded-full capitalize">{q.type}</span>
+      {loading ? (
+        <div className="flex items-center justify-center py-20">
+          <div className="size-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+        </div>
+      ) : questions.length === 0 ? (
+        <div className="bg-white dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 p-12 text-center">
+          <span className="material-symbols-outlined text-4xl text-slate-300 block mb-3">quiz</span>
+          <p className="text-sm text-slate-500">No questions yet. Add your first question.</p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {questions.map((q: any) => (
+            <div key={q.id} className="bg-white dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 p-5 flex items-center justify-between hover:border-primary/50 transition-all">
+              <div className="flex items-start gap-4 flex-1">
+                <div className={`size-10 rounded-lg flex items-center justify-center ${q.type === "coding" ? "bg-purple-100 text-purple-600" : "bg-blue-100 text-blue-600"}`}>
+                  <span className="material-symbols-outlined text-sm">{q.type === "coding" ? "code" : "description"}</span>
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-slate-900 dark:text-white mb-1">{q.text}</p>
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${difficultyColor[q.difficulty] ?? ""}`}>{q.difficulty}</span>
+                    <span className="text-[10px] font-medium bg-slate-100 dark:bg-slate-700 text-slate-500 px-2 py-0.5 rounded-full">{q.skill}</span>
+                    <span className="text-[10px] font-medium bg-slate-100 dark:bg-slate-700 text-slate-500 px-2 py-0.5 rounded-full capitalize">{q.type}</span>
+                  </div>
                 </div>
               </div>
+              <div className="flex items-center gap-2 ml-4">
+                <button className="size-8 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-slate-500 hover:text-primary transition-colors">
+                  <span className="material-symbols-outlined text-sm">edit</span>
+                </button>
+                <button onClick={() => handleDelete(q.id)} className="size-8 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-slate-500 hover:text-red-500 transition-colors">
+                  <span className="material-symbols-outlined text-sm">delete</span>
+                </button>
+              </div>
             </div>
-            <div className="flex items-center gap-2 ml-4">
-              <button className="size-8 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-slate-500 hover:text-primary transition-colors">
-                <span className="material-symbols-outlined text-sm">edit</span>
-              </button>
-              <button className="size-8 rounded-lg bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-slate-500 hover:text-red-500 transition-colors">
-                <span className="material-symbols-outlined text-sm">delete</span>
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
