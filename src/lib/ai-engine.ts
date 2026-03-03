@@ -1,20 +1,13 @@
 /**
- * HIREWISE — AI Engine: Modular Provider Abstraction
- *
- * Supports:
- *   - Ollama (local) — default
- *   - Gemini (cloud) — fallback
+ * HIREWISE — AI Engine: Ollama + Mistral (Local LLM)
  *
  * Configured via environment variables:
- *   AI_PROVIDER        = "ollama" | "gemini"
  *   OLLAMA_BASE_URL    = "http://localhost:11434"
  *   OLLAMA_MODEL       = "mistral"
  *   AI_TIMEOUT_MS      = 30000
  *   AI_MAX_RETRIES     = 2
- *   GEMINI_API_KEY     = (existing)
  */
 
-import { GoogleGenerativeAI, type GenerativeModel } from "@google/generative-ai";
 import { createHash } from "crypto";
 
 // ── Types ──────────────────────────────────────────────────
@@ -37,12 +30,10 @@ interface OllamaResponse {
 
 function getConfig() {
   return {
-    provider: (process.env.AI_PROVIDER ?? "ollama") as "ollama" | "gemini",
     ollamaBaseUrl: process.env.OLLAMA_BASE_URL ?? "http://localhost:11434",
     ollamaModel: process.env.OLLAMA_MODEL ?? "mistral",
     timeoutMs: parseInt(process.env.AI_TIMEOUT_MS ?? "30000", 10),
     maxRetries: parseInt(process.env.AI_MAX_RETRIES ?? "2", 10),
-    geminiApiKey: process.env.GEMINI_API_KEY ?? "",
   };
 }
 
@@ -59,7 +50,6 @@ function getCached(prompt: string): string | null {
   const key = cacheKey(prompt);
   const entry = cache.get(key);
   if (!entry) return null;
-  // Expire after 10 minutes
   if (Date.now() - entry.ts > 600_000) {
     cache.delete(key);
     return null;
@@ -70,7 +60,6 @@ function getCached(prompt: string): string | null {
 function setCache(prompt: string, value: string): void {
   const key = cacheKey(prompt);
   if (cache.size >= CACHE_MAX) {
-    // Evict oldest entry
     const oldest = cache.keys().next().value;
     if (oldest) cache.delete(oldest);
   }
@@ -130,75 +119,25 @@ class OllamaProvider implements AIProvider {
   }
 }
 
-// ── Gemini Provider ────────────────────────────────────────
-
-let _geminiModel: GenerativeModel | null = null;
-
-class GeminiProvider implements AIProvider {
-  readonly name = "gemini";
-  readonly model = "gemini-1.5-flash";
-  private readonly timeoutMs: number;
-
-  constructor(apiKey: string, timeoutMs: number) {
-    this.timeoutMs = timeoutMs;
-    if (!_geminiModel) {
-      const genAI = new GoogleGenerativeAI(apiKey);
-      _geminiModel = genAI.getGenerativeModel({ model: this.model });
-    }
-  }
-
-  async generate(prompt: string): Promise<string> {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
-
-    try {
-      const result = await _geminiModel!.generateContent(prompt);
-      const text = result.response.text().trim();
-      return text;
-    } finally {
-      clearTimeout(timer);
-    }
-  }
-}
-
-// ── Provider Factory with Fallback ─────────────────────────
+// ── Provider Factory ───────────────────────────────────────
 
 let _cachedProvider: AIProvider | null = null;
-let _fallbackProvider: AIProvider | null = null;
 
-function buildProviders(): { primary: AIProvider; fallback: AIProvider | null } {
+function buildProvider(): AIProvider {
   const cfg = getConfig();
-
-  let primary: AIProvider;
-  let fallback: AIProvider | null = null;
-
-  if (cfg.provider === "ollama") {
-    primary = new OllamaProvider(cfg.ollamaBaseUrl, cfg.ollamaModel, cfg.timeoutMs);
-    // Auto-fallback to Gemini if key exists
-    if (cfg.geminiApiKey) {
-      fallback = new GeminiProvider(cfg.geminiApiKey, cfg.timeoutMs);
-    }
-  } else {
-    if (!cfg.geminiApiKey) throw new Error("AI_PROVIDER=gemini but GEMINI_API_KEY is missing");
-    primary = new GeminiProvider(cfg.geminiApiKey, cfg.timeoutMs);
-  }
-
-  return { primary, fallback };
+  return new OllamaProvider(cfg.ollamaBaseUrl, cfg.ollamaModel, cfg.timeoutMs);
 }
 
 export function getAIProvider(): AIProvider {
   if (!_cachedProvider) {
-    const { primary, fallback } = buildProviders();
-    _cachedProvider = primary;
-    _fallbackProvider = fallback;
+    _cachedProvider = buildProvider();
   }
   return _cachedProvider;
 }
 
-// ── Core Generate with Retry + Fallback + Cache + Logging ──
+// ── Core Generate with Retry + Cache + Logging ─────────────
 
 export async function aiGenerate(prompt: string, options?: { skipCache?: boolean }): Promise<string> {
-  // Check cache
   if (!options?.skipCache) {
     const cached = getCached(prompt);
     if (cached) {
@@ -213,7 +152,6 @@ export async function aiGenerate(prompt: string, options?: { skipCache?: boolean
 
   let lastError: Error | null = null;
 
-  // Try primary provider with retries
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const start = Date.now();
@@ -233,37 +171,15 @@ export async function aiGenerate(prompt: string, options?: { skipCache?: boolean
         `[AI] ${provider.name} attempt ${attempt + 1} failed: ${lastError.message}`
       );
 
-      // Wait briefly before retry (exponential backoff: 1s, 2s)
       if (attempt < maxRetries) {
         await new Promise((r) => setTimeout(r, 1000 * (attempt + 1)));
       }
     }
   }
 
-  // Try fallback provider
-  if (_fallbackProvider) {
-    console.warn(`[AI] Primary provider ${provider.name} exhausted. Falling back to ${_fallbackProvider.name}...`);
-
-    try {
-      const start = Date.now();
-      const result = await _fallbackProvider.generate(prompt);
-      const elapsed = Date.now() - start;
-
-      console.log(
-        `[AI] Fallback Provider: ${_fallbackProvider.name}, Model: ${_fallbackProvider.model}, Time: ${elapsed}ms`
-      );
-
-      setCache(prompt, result);
-      return result;
-    } catch (fallbackErr) {
-      console.error(`[AI] Fallback provider ${_fallbackProvider.name} also failed:`, fallbackErr);
-    }
-  }
-
   throw new Error(
-    `AI generation failed after ${maxRetries + 1} attempts on ${provider.name}` +
-    (_fallbackProvider ? ` and fallback ${_fallbackProvider.name}` : "") +
-    `. Last error: ${lastError?.message}`
+    `AI generation failed after ${maxRetries + 1} attempts on ${provider.name}. ` +
+    `Last error: ${lastError?.message}`
   );
 }
 
@@ -274,9 +190,7 @@ export function getCurrentModelName(): string {
   return provider.model;
 }
 
-// Reset providers (useful for testing or env changes)
 export function resetProviders(): void {
   _cachedProvider = null;
-  _fallbackProvider = null;
   cache.clear();
 }
