@@ -1,0 +1,129 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+@import "tailwindcss";
+
+@theme inline {
+  --color-primary: #135bec;
+  --color-background-light: #f6f6f8;
+  --color-background-dark: #101622;
+  --font-display: "Inter", sans-serif;
+}
+
+body {
+  font-family: "Inter", sans-serif;
+}
+
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+.dark ::-webkit-scrollbar-thumb {
+  background: #334155;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out;
+}
+
+@keyframes slide-in-right {
+  from { opacity: 0; transform: translateX(16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.animate-slide-in-right {
+  animation: slide-in-right 0.3s ease-out;
+}
+
+@keyframes progress-fill {
+  from { width: 0%; }
+}
+.animate-progress {
+  animation: progress-fill 1s ease-out;
+}
+
+/* Hero animations */
+@keyframes hero-fade-up {
+  from { opacity: 0; transform: translateY(30px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-hero-fade-up {
+  animation: hero-fade-up 0.8s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.animate-hero-delay-1 { animation-delay: 0.1s; }
+.animate-hero-delay-2 { animation-delay: 0.25s; }
+.animate-hero-delay-3 { animation-delay: 0.4s; }
+.animate-hero-delay-4 { animation-delay: 0.55s; }
+
+@keyframes hero-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-12px); }
+}
+.animate-hero-float {
+  animation: hero-float 6s ease-in-out infinite;
+}
+
+@keyframes hero-slide-in-left {
+  from { opacity: 0; transform: translateX(-40px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.animate-hero-slide-left {
+  animation: hero-slide-in-left 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.6s both;
+}
+
+@keyframes hero-scale-in {
+  from { opacity: 0; transform: scale(0.8); }
+  to { opacity: 1; transform: scale(1); }
+}
+.animate-hero-scale-in {
+  animation: hero-scale-in 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.3s both;
+}
+
+@keyframes glow-pulse {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(1.05); }
+}
+.animate-glow-pulse {
+  animation: glow-pulse 4s ease-in-out infinite;
+}
+
+@keyframes orb-drift-1 {
+  0%, 100% { transform: translate(0, 0); }
+  25% { transform: translate(30px, -20px); }
+  50% { transform: translate(-10px, -40px); }
+  75% { transform: translate(-30px, -10px); }
+}
+.animate-orb-1 {
+  animation: orb-drift-1 12s ease-in-out infinite;
+}
+
+@keyframes orb-drift-2 {
+  0%, 100% { transform: translate(0, 0); }
+  25% { transform: translate(-20px, 30px); }
+  50% { transform: translate(20px, 10px); }
+  75% { transform: translate(10px, -20px); }
+}
+.animate-orb-2 {
+  animation: orb-drift-2 15s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.animate-shimmer {
+  background: linear-gradient(90deg, transparent, rgba(19, 91, 236, 0.08), transparent);
+  background-size: 200% 100%;
+  animation: shimmer 3s ease-in-out infinite;
+}
