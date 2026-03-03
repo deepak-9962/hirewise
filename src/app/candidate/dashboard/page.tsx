@@ -2,12 +2,15 @@
 
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
-import { useCandidateInterviews, useCandidateReports } from "@/hooks/useSupabase";
+import { useCandidateInterviews, useCandidateReports, useCandidateApplications } from "@/hooks/useSupabase";
 
 export default function CandidateDashboard() {
   const { user, profile } = useAuth();
   const { data: interviews, loading: interviewsLoading } = useCandidateInterviews(user?.id);
   const { data: reports, loading: reportsLoading } = useCandidateReports(user?.id);
+  const { data: applicationsData } = useCandidateApplications(user?.id);
+
+  const applications = (applicationsData ?? []) as any[];
 
   const allInterviews = (interviews as Record<string, unknown>[] | null) || [];
   const upcoming = allInterviews.filter((i) => i.status === "scheduled");
@@ -84,6 +87,56 @@ export default function CandidateDashboard() {
                   <p>No upcoming interviews</p>
                 </div>
               )}
+            </div>
+          </div>
+
+          {/* Active Applications */}
+          <div className="bg-white dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700">
+            <div className="p-5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+              <h2 className="font-bold text-slate-900 dark:text-white">Active Applications</h2>
+              <Link href="/candidate/jobs" className="text-sm text-primary font-medium hover:underline">Browse Jobs</Link>
+            </div>
+            <div className="divide-y divide-slate-100 dark:divide-slate-700">
+              {applications.length === 0 ? (
+                <div className="p-8 text-center">
+                  <span className="material-symbols-outlined text-3xl text-slate-300 block mb-2">work_off</span>
+                  <p className="text-sm text-slate-500">No applications yet.</p>
+                  <Link href="/candidate/jobs" className="text-sm text-primary font-medium hover:underline mt-1 inline-block">Browse open jobs</Link>
+                </div>
+              ) : applications.slice(0, 5).map((app: any) => {
+                const statusStyles: Record<string, string> = {
+                  applied: "bg-blue-100 text-blue-700",
+                  under_review: "bg-amber-100 text-amber-700",
+                  test_enabled: "bg-green-100 text-green-700",
+                  test_completed: "bg-purple-100 text-purple-700",
+                  rejected: "bg-red-100 text-red-700",
+                  hired: "bg-emerald-100 text-emerald-700",
+                };
+                const statusLabels: Record<string, string> = {
+                  applied: "Applied",
+                  under_review: "Under Review",
+                  test_enabled: "Test Ready",
+                  test_completed: "Test Done",
+                  rejected: "Rejected",
+                  hired: "Hired!",
+                };
+                return (
+                  <div key={app.id} className="p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="size-9 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                        <span className="material-symbols-outlined text-primary text-sm">work</span>
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900 dark:text-white">{app.jobs?.title ?? "—"}</p>
+                        <p className="text-xs text-slate-400">{app.jobs?.department ?? ""} · {new Date(app.applied_at).toLocaleDateString()}</p>
+                      </div>
+                    </div>
+                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${statusStyles[app.status] ?? "bg-slate-100 text-slate-500"}`}>
+                      {statusLabels[app.status] ?? app.status}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           </div>
 

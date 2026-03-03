@@ -83,6 +83,10 @@ const mockQuestions: Question[] = [
 export default function InterviewSessionPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: interviewId } = use(params);
   const { user } = useAuth();
+  const [questions, setQuestions] = useState<Question[]>(mockQuestions);
+  const [jobTitle, setJobTitle] = useState("Technical Interview");
+  const [jobId, setJobId] = useState<string | null>(null);
+  const [questionsLoading, setQuestionsLoading] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [saving, setSaving] = useState(false);
   const [answers, setAnswers] = useState<Record<number, string>>({});
@@ -98,8 +102,36 @@ export default function InterviewSessionPage({ params }: { params: Promise<{ id:
   const [generatingReport, setGeneratingReport] = useState(false);
   const [finalReport, setFinalReport] = useState<Record<string, unknown> | null>(null);
 
-  const currentQ = mockQuestions[currentIndex];
-  const totalQuestions = mockQuestions.length;
+  // Load real questions from DB (fall back to mock if not available)
+  useEffect(() => {
+    if (interviewId === "demo") return;
+    setQuestionsLoading(true);
+    fetch(`/api/interview/questions?interview_id=${interviewId}`)
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.questions?.length) {
+          const mapped: Question[] = data.questions.map((q: any, i: number) => ({
+            id: i + 1,
+            type: (q.type as "descriptive" | "coding") ?? "descriptive",
+            difficulty: (q.difficulty as "Easy" | "Medium" | "Hard") ?? "Medium",
+            skill: q.skill ?? "",
+            text: q.text,
+            timeLimit: q.time_limit ?? 300,
+            language: q.language,
+            starterCode: q.starter_code,
+          }));
+          setQuestions(mapped);
+          setTimeLeft(mapped[0]?.timeLimit ?? 300);
+        }
+        if (data.jobTitle) setJobTitle(data.jobTitle);
+        if (data.jobId) setJobId(data.jobId);
+      })
+      .catch(() => {})
+      .finally(() => setQuestionsLoading(false));
+  }, [interviewId]);
+
+  const currentQ = questions[currentIndex];
+  const totalQuestions = questions.length;
 
   // Timer
   useEffect(() => {
@@ -116,8 +148,8 @@ export default function InterviewSessionPage({ params }: { params: Promise<{ id:
 
   // Reset timer on question change
   useEffect(() => {
-    setTimeLeft(mockQuestions[currentIndex].timeLimit);
-  }, [currentIndex]);
+    if (questions[currentIndex]) setTimeLeft(questions[currentIndex].timeLimit);
+  }, [currentIndex, questions]);
 
   const handleSubmit = useCallback(async () => {
     setIsSubmitted((prev) => ({ ...prev, [currentQ.id]: true }));
@@ -154,7 +186,7 @@ export default function InterviewSessionPage({ params }: { params: Promise<{ id:
       setShowComplete(true);
       setGeneratingReport(true);
       try {
-        const questionsData = mockQuestions.map((q) => ({
+        const questionsData = questions.map((q) => ({
           question: q.text,
           answer: answers[q.id] || "(No answer provided)",
           type: q.type,
@@ -180,8 +212,9 @@ export default function InterviewSessionPage({ params }: { params: Promise<{ id:
               body: JSON.stringify({
                 interviewId: interviewId,
                 candidateId: user?.id,
-                jobTitle: "Technical Interview",
-                questions: mockQuestions,
+                jobId: jobId,
+                jobTitle: jobTitle,
+                questions,
                 answers,
                 evaluations,
                 finalReport: data.report,
@@ -241,6 +274,25 @@ export default function InterviewSessionPage({ params }: { params: Promise<{ id:
     Medium: "bg-amber-100 text-amber-700",
     Hard: "bg-red-100 text-red-700",
   };
+
+  if (questionsLoading) {
+    return (
+      <div className="min-h-screen bg-background-light dark:bg-background-dark flex items-center justify-center">
+        <div className="text-center">
+          <div className="size-10 border-4 border-primary/30 border-t-primary rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-sm text-slate-500">Loading interview questions...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentQ) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-slate-500">No questions found for this interview.</p>
+      </div>
+    );
+  }
 
   if (showComplete) {
     return (
@@ -325,7 +377,7 @@ export default function InterviewSessionPage({ params }: { params: Promise<{ id:
               <div>
                 <h3 className="font-bold text-slate-900 dark:text-white mb-3 text-sm">Question-by-Question Scores</h3>
                 <div className="space-y-2">
-                  {mockQuestions.map((q, i) => (
+                  {questions.map((q, i) => (
                     <div key={q.id} className="flex items-center gap-3">
                       <span className="text-xs font-bold text-slate-400 w-6">Q{i + 1}</span>
                       <div className="flex-1 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
@@ -372,7 +424,7 @@ export default function InterviewSessionPage({ params }: { params: Promise<{ id:
               <span className="font-bold text-slate-900 dark:text-white text-sm">HIREWISE</span>
             </div>
             <div className="h-6 w-px bg-slate-200 dark:bg-slate-700"></div>
-            <span className="text-sm text-slate-500">Senior Frontend Engineer - TechCorp</span>
+            <span className="text-sm text-slate-500">{jobTitle}</span>
           </div>
 
           <div className="flex items-center gap-4">
@@ -596,7 +648,7 @@ export default function InterviewSessionPage({ params }: { params: Promise<{ id:
             <div className="flex items-center gap-2">
               {/* Question pills */}
               <div className="hidden sm:flex items-center gap-1">
-                {mockQuestions.map((q, i) => (
+                {questions.map((q, i) => (
                   <button
                     key={q.id}
                     onClick={() => setCurrentIndex(i)}
