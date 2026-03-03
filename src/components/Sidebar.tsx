@@ -42,14 +42,13 @@ const navItems: Record<string, NavItem[]> = {
 export default function Sidebar({ role }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { profile, signOut } = useAuth();
+  const { user, profile, signOut } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const items = navItems[role] || [];
 
   const handleSignOut = async () => {
     await signOut();
-    router.push("/login");
-    router.refresh();
+    window.location.replace("/");
   };
 
   return (
@@ -104,7 +103,7 @@ export default function Sidebar({ role }: SidebarProps) {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium text-slate-900 dark:text-white truncate">
-              {profile?.name || (role === "candidate" ? "Candidate" : role === "recruiter" ? "Recruiter" : "Admin")}
+              {profile?.name || user?.email?.split("@")[0] || (role === "candidate" ? "Candidate" : role === "recruiter" ? "Recruiter" : "Admin")}
             </p>
             <p className="text-xs text-slate-500 capitalize">{role}</p>
           </div>

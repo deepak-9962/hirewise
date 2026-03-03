@@ -85,10 +85,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    // 1. Call server-side API to clear httpOnly cookies
+    try {
+      await fetch("/api/auth/signout", { method: "POST" });
+    } catch (e) {
+      console.error("Server sign out error:", e);
+    }
+    // 2. Also sign out on client side
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {
+      console.error("Client sign out error:", e);
+    }
+    // 3. Clear state
     setUser(null);
     setProfile(null);
     setSession(null);
+    // 4. Clear any remaining cookies & localStorage
+    document.cookie.split(";").forEach((c) => {
+      const name = c.trim().split("=")[0];
+      if (name.startsWith("sb-")) {
+        document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/`;
+      }
+    });
+    Object.keys(localStorage).forEach((key) => {
+      if (key.startsWith("sb-")) localStorage.removeItem(key);
+    });
   };
 
   return (

@@ -19,11 +19,12 @@ export default function CandidateDashboard() {
   const skills = profile?.skills || [];
 
   const isLoading = interviewsLoading || reportsLoading;
+  const displayName = profile?.name || user?.email?.split("@")[0] || "there";
   return (
     <div className="animate-fade-in">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Welcome back, {profile?.name?.split(" ")[0] || "there"}</h1>
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Welcome back, {displayName.split(" ")[0]}</h1>
         <p className="text-slate-500 dark:text-slate-400 mt-1">Here&#39;s an overview of your interview activity</p>
       </div>
 
@@ -136,7 +137,7 @@ export default function CandidateDashboard() {
               <div className="size-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-3">
                 <span className="material-symbols-outlined text-primary text-3xl">person</span>
               </div>
-              <h3 className="font-bold text-slate-900 dark:text-white">{profile?.name || "User"}</h3>
+              <h3 className="font-bold text-slate-900 dark:text-white">{profile?.name || user?.email?.split("@")[0] || "User"}</h3>
               <p className="text-sm text-slate-500">{profile?.email || user?.email}</p>
             </div>
             <div className="border-t border-slate-100 dark:border-slate-700 pt-4">

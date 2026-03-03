@@ -5,7 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useTheme } from "@/context/ThemeContext";
 
 export default function Header() {
-  const { user, profile, loading } = useAuth();
+  const { user, profile, loading, signOut } = useAuth();
   const { theme, toggleTheme } = useTheme();
 
   const getDashboardLink = () => {
@@ -54,6 +54,16 @@ export default function Header() {
                 <Link href={getDashboardLink()} className="bg-primary text-white text-sm font-bold px-5 py-2.5 rounded-lg hover:bg-blue-700 transition-all shadow-md shadow-primary/20">
                   Dashboard
                 </Link>
+                <button
+                  onClick={async () => {
+                    await signOut();
+                    window.location.replace("/");
+                  }}
+                  className="flex items-center gap-1 text-sm font-semibold text-red-600 dark:text-red-400 px-4 py-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-all border border-red-200 dark:border-red-800"
+                >
+                  <span className="material-symbols-outlined text-lg">logout</span>
+                  Logout
+                </button>
               </>
             ) : (
               <>

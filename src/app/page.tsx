@@ -17,13 +17,6 @@ export default function Home() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
               <div className="flex flex-col gap-8 max-w-2xl">
-                <div className="animate-hero-fade-up animate-hero-delay-1 inline-flex items-center gap-2 bg-primary/10 text-primary px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider w-fit">
-                  <span className="relative flex h-2 w-2">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
-                  </span>
-                  Now Powered by GPT-4o
-                </div>
                 <h1 className="animate-hero-fade-up animate-hero-delay-2 text-5xl lg:text-7xl font-black text-slate-900 dark:text-white leading-[1.1] tracking-tight">
                   Scale Your Hiring with <span className="text-primary bg-clip-text">AI-Powered</span> Intelligence
                 </h1>
