@@ -1,24 +1,50 @@
 "use client";
 
+import { useEffect } from "react";
 import Link from "next/link";
-import { useDashboardStats, useAllInterviews, useJobs } from "@/hooks/useSupabase";
+import { useApplicationStats, useAllApplications, useJobs } from "@/hooks/useSupabase";
+
+const appStatusColors: Record<string, string> = {
+  applied: "bg-blue-100 text-blue-700",
+  under_review: "bg-amber-100 text-amber-700",
+  test_enabled: "bg-green-100 text-green-700",
+  test_completed: "bg-purple-100 text-purple-700",
+  rejected: "bg-red-100 text-red-600",
+  hired: "bg-emerald-100 text-emerald-700",
+};
+
+const appStatusLabels: Record<string, string> = {
+  applied: "Applied",
+  under_review: "Under Review",
+  test_enabled: "Test Enabled",
+  test_completed: "Test Done",
+  rejected: "Rejected",
+  hired: "Hired",
+};
 
 export default function RecruiterDashboard() {
-  const { stats: dashStats, loading: statsLoading } = useDashboardStats("recruiter");
-  const { data: interviews, loading: interviewsLoading } = useAllInterviews();
+  const { stats, loading: statsLoading, refetch: refetchStats } = useApplicationStats();
+  const { data: applicationsData, loading: appsLoading, refetch: refetchApps } = useAllApplications(10);
   const { data: jobsData, loading: jobsLoading } = useJobs("active");
 
-  const stats = [
-    { label: "Active Jobs", value: String(dashStats.activeJobs ?? 0), icon: "work", color: "text-primary", bg: "bg-primary/10", trend: "" },
-    { label: "Total Candidates", value: String(dashStats.totalCandidates ?? 0), icon: "group", color: "text-green-600", bg: "bg-green-50", trend: "" },
-    { label: "Total Interviews", value: String(dashStats.totalInterviews ?? 0), icon: "videocam", color: "text-amber-600", bg: "bg-amber-50", trend: "" },
-    { label: "Completed", value: String(dashStats.completed ?? 0), icon: "trending_up", color: "text-purple-600", bg: "bg-purple-50", trend: "" },
-  ];
-
-  const recentCandidates = ((interviews ?? []) as any[]).slice(0, 5);
+  const applications = (applicationsData ?? []) as any[];
   const activeJobs = (jobsData ?? []) as any[];
 
-  if (statsLoading || interviewsLoading || jobsLoading) {
+  // Also refetch when window regains focus (navigating back from another tab/page)
+  useEffect(() => {
+    const onFocus = () => { refetchStats(); refetchApps(); };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [refetchStats, refetchApps]);
+
+  const statCards = [
+    { label: "Active Jobs", value: String(stats.activeJobs ?? 0), icon: "work", color: "text-primary", bg: "bg-primary/10" },
+    { label: "Total Applications", value: String(stats.totalApplications ?? 0), icon: "inbox", color: "text-green-600", bg: "bg-green-50" },
+    { label: "Tests Enabled", value: String(stats.testsEnabled ?? 0), icon: "quiz", color: "text-amber-600", bg: "bg-amber-50" },
+    { label: "Tests Completed", value: String(stats.testsCompleted ?? 0), icon: "trending_up", color: "text-purple-600", bg: "bg-purple-50" },
+  ];
+
+  if (statsLoading || appsLoading || jobsLoading) {
     return (
       <div className="animate-fade-in flex items-center justify-center py-20">
         <div className="size-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
@@ -40,7 +66,7 @@ export default function RecruiterDashboard() {
 
       {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        {stats.map((stat) => (
+        {statCards.map((stat) => (
           <div key={stat.label} className="bg-white dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 p-5">
             <div className="flex items-center justify-between mb-3">
               <span className="text-sm font-medium text-slate-500 dark:text-slate-400">{stat.label}</span>
@@ -49,46 +75,43 @@ export default function RecruiterDashboard() {
               </div>
             </div>
             <p className="text-3xl font-bold text-slate-900 dark:text-white">{stat.value}</p>
-            <p className="text-xs text-slate-400 mt-1">{stat.trend}</p>
           </div>
         ))}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
-        {/* Recent Candidates */}
+        {/* Recent Applications */}
         <div className="lg:col-span-3 bg-white dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700">
           <div className="p-5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
-            <h2 className="font-bold text-slate-900 dark:text-white">Recent Candidates</h2>
-            <Link href="/recruiter/monitoring" className="text-sm text-primary font-medium hover:underline">View all</Link>
+            <h2 className="font-bold text-slate-900 dark:text-white">Recent Applications</h2>
+            <Link href="/recruiter/jobs" className="text-sm text-primary font-medium hover:underline">View Jobs</Link>
           </div>
           <div className="divide-y divide-slate-100 dark:divide-slate-700">
-            {recentCandidates.length === 0 && (
-              <div className="p-8 text-center text-sm text-slate-400">No interviews yet</div>
+            {applications.length === 0 && (
+              <div className="p-8 text-center text-sm text-slate-400">No applications yet</div>
             )}
-            {recentCandidates.map((c: any) => (
-              <div key={c.id} className="p-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+            {applications.map((app: any) => (
+              <div key={app.id} className="p-4 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
                 <div className="flex items-center gap-3">
-                  <div className="size-10 rounded-full bg-primary/10 flex items-center justify-center">
+                  <div className="size-10 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                     <span className="material-symbols-outlined text-primary text-sm">person</span>
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-slate-900 dark:text-white">{c.profiles?.name ?? "Unknown"}</p>
-                    <p className="text-xs text-slate-500">{c.jobs?.title ?? "—"} · {new Date(c.created_at).toLocaleDateString()}</p>
+                    <p className="text-sm font-semibold text-slate-900 dark:text-white">{app.profiles?.name ?? "Unknown"}</p>
+                    <p className="text-xs text-slate-500">
+                      {app.jobs?.title ?? "—"}
+                      {app.jobs?.department ? ` · ${app.jobs.department}` : ""}
+                      {" · "}{new Date(app.applied_at).toLocaleDateString()}
+                    </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  {c.status === "completed" && c.score !== null && (
-                    <span className={`text-sm font-bold ${c.score >= 85 ? "text-green-600" : c.score >= 70 ? "text-amber-600" : "text-red-500"}`}>
-                      {c.score}/100
-                    </span>
-                  )}
-                  <span className={`text-xs font-bold px-2 py-1 rounded-full ${
-                    c.status === "completed" ? "bg-green-100 text-green-700" :
-                    c.status === "in-progress" ? "bg-blue-100 text-blue-700" :
-                    "bg-slate-100 text-slate-600"
-                  }`}>
-                    {c.status === "in-progress" ? "Live" : c.status === "scheduled" ? "Scheduled" : "Done"}
+                <div className="flex items-center gap-2">
+                  <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${appStatusColors[app.status] ?? "bg-slate-100 text-slate-500"}`}>
+                    {appStatusLabels[app.status] ?? app.status}
                   </span>
+                  {app.jobs?.id && (
+                    <Link href={`/recruiter/jobs/${app.jobs.id}?tab=applications`} className="text-xs text-primary hover:underline font-medium">Review</Link>
+                  )}
                 </div>
               </div>
             ))}
@@ -105,25 +128,29 @@ export default function RecruiterDashboard() {
             {activeJobs.length === 0 && (
               <div className="p-8 text-center text-sm text-slate-400">No active jobs</div>
             )}
-            {activeJobs.map((job: any) => (
-              <div key={job.id} className="p-4">
-                <p className="text-sm font-semibold text-slate-900 dark:text-white mb-2">{job.title}</p>
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="text-center bg-slate-50 dark:bg-slate-700/50 rounded-lg py-1.5">
-                    <p className="text-sm font-bold text-slate-900 dark:text-white">{job.applicants_count ?? 0}</p>
-                    <p className="text-[10px] text-slate-500">Applied</p>
-                  </div>
-                  <div className="text-center bg-slate-50 dark:bg-slate-700/50 rounded-lg py-1.5">
-                    <p className="text-sm font-bold text-slate-900 dark:text-white">{job.interviews_count ?? 0}</p>
-                    <p className="text-[10px] text-slate-500">Interviews</p>
-                  </div>
-                  <div className="text-center bg-slate-50 dark:bg-slate-700/50 rounded-lg py-1.5">
-                    <p className="text-sm font-bold text-primary">{job.avg_score ?? "—"}</p>
-                    <p className="text-[10px] text-slate-500">Avg Score</p>
+            {activeJobs.map((job: any) => {
+              const jobApps = applications.filter((a: any) => a.jobs?.id === job.id || a.job_id === job.id);
+              const testsDone = jobApps.filter((a: any) => a.status === "test_completed").length;
+              return (
+                <div key={job.id} className="p-4">
+                  <p className="text-sm font-semibold text-slate-900 dark:text-white mb-2 truncate">{job.title}</p>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="text-center bg-slate-50 dark:bg-slate-700/50 rounded-lg py-1.5">
+                      <p className="text-sm font-bold text-slate-900 dark:text-white">{jobApps.length}</p>
+                      <p className="text-[10px] text-slate-500">Applied</p>
+                    </div>
+                    <div className="text-center bg-slate-50 dark:bg-slate-700/50 rounded-lg py-1.5">
+                      <p className="text-sm font-bold text-slate-900 dark:text-white">{testsDone}</p>
+                      <p className="text-[10px] text-slate-500">Tests Done</p>
+                    </div>
+                    <div className="text-center bg-slate-50 dark:bg-slate-700/50 rounded-lg py-1.5">
+                      <Link href={`/recruiter/jobs/${job.id}`} className="text-sm font-bold text-primary">View</Link>
+                      <p className="text-[10px] text-slate-500">Manage</p>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>

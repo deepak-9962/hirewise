@@ -112,27 +112,53 @@ export async function deleteJob(id: string) {
 
 // ── Applications ──
 export function useApplications(jobId?: string) {
-  return useSupabaseQuery(
-    () =>
-      supabase
-        .from("applications")
-        .select("*, profiles!candidate_id(name, email)")
-        .eq("job_id", jobId ?? "")
-        .order("applied_at", { ascending: false }),
-    [jobId]
-  );
+  const [data, setData] = useState<any[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const refetch = useCallback(async () => {
+    if (!jobId) { setData([]); setLoading(false); return; }
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/applications?job_id=${jobId}`);
+      const json = await res.json();
+      if (!res.ok) { setError(json.error ?? "Failed"); setData([]); }
+      else setData(Array.isArray(json) ? json : []);
+    } catch (e: any) {
+      setError(e?.message ?? "Network error");
+      setData([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [jobId]);
+
+  useEffect(() => { refetch(); }, [refetch]);
+  return { data, loading, error, refetch };
 }
 
 export function useCandidateApplications(userId?: string) {
-  return useSupabaseQuery(
-    () =>
-      supabase
-        .from("applications")
-        .select("*, jobs(id, title, department, type, status, target_skills)")
-        .eq("candidate_id", userId ?? "")
-        .order("applied_at", { ascending: false }),
-    [userId]
-  );
+  const [data, setData] = useState<any[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const refetch = useCallback(async () => {
+    if (!userId) { setData([]); setLoading(false); return; }
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/applications?candidate_id=${userId}`);
+      const json = await res.json();
+      if (!res.ok) { setError(json.error ?? "Failed"); setData([]); }
+      else setData(Array.isArray(json) ? json : []);
+    } catch (e: any) {
+      setError(e?.message ?? "Network error");
+      setData([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [userId]);
+
+  useEffect(() => { refetch(); }, [refetch]);
+  return { data, loading, error, refetch };
 }
 
 export async function createApplication(jobId: string, candidateId: string, coverNote?: string) {
@@ -187,6 +213,56 @@ export async function addJobQuestion(jobId: string, questionId: string, orderInd
 
 export async function removeJobQuestion(jobId: string, questionId: string) {
   return supabase.from("job_questions").delete().eq("job_id", jobId).eq("question_id", questionId);
+}
+
+// ── All Applications (recruiter view, via admin API) ──
+export function useAllApplications(limit = 20) {
+  const [data, setData] = useState<any[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const refetch = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/applications/all?limit=${limit}`);
+      const json = await res.json();
+      if (!res.ok) { setError(json.error ?? "Failed"); setData([]); }
+      else setData(Array.isArray(json) ? json : []);
+    } catch (e: any) {
+      setError(e?.message ?? "Network error");
+      setData([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [limit]);
+
+  useEffect(() => { refetch(); }, [refetch]);
+  return { data, loading, error, refetch };
+}
+
+// ── Application Stats (recruiter dashboard counters) ──
+export function useApplicationStats() {
+  const [stats, setStats] = useState<Record<string, number>>({});
+  const [loading, setLoading] = useState(true);
+
+  const refetch = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/applications/stats");
+      if (res.ok) setStats(await res.json());
+    } catch { /* silent */ }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => {
+    refetch();
+    // Refetch whenever the tab becomes visible (e.g. user navigates back)
+    const onVisible = () => { if (document.visibilityState === "visible") refetch(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [refetch]);
+
+  return { stats, loading, refetch };
 }
 
 // ── Open Jobs (for candidates) ──
@@ -353,16 +429,52 @@ export function useCandidateReports(candidateId?: string) {
 }
 
 export function useAllReports() {
-  return useSupabaseQuery(() =>
-    supabase
-      .from("reports")
-      .select("*, profiles!candidate_id(name, email), interviews(*, jobs(title))")
-      .order("generated_at", { ascending: false })
-  );
+  const [data, setData] = useState<any[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const refetch = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/reports/all");
+      const json = await res.json();
+      if (!res.ok) { setError(json.error ?? "Failed"); setData([]); }
+      else setData(Array.isArray(json) ? json : []);
+    } catch (e: any) {
+      setError(e?.message ?? "Network error"); setData([]);
+    } finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { refetch(); }, [refetch]);
+  return { data, loading, error, refetch };
 }
 
 export async function updateReport(id: string, updates: Record<string, unknown>) {
   return supabase.from("reports").update(updates).eq("id", id);
+}
+
+// ── Recruiter Analytics ──
+export function useRecruiterAnalytics() {
+  const [data, setData] = useState<any | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const refetch = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/analytics/recruiter");
+      if (res.ok) setData(await res.json());
+    } catch { /* silent */ }
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => {
+    refetch();
+    const onVisible = () => { if (document.visibilityState === "visible") refetch(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [refetch]);
+
+  return { data, loading, refetch };
 }
 
 // ── Bias Alerts ──

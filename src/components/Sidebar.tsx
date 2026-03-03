@@ -30,6 +30,7 @@ const navItems: Record<string, NavItem[]> = {
     { label: "Monitoring", href: "/recruiter/monitoring", icon: "monitor_heart" },
     { label: "Reports", href: "/recruiter/reports", icon: "assessment" },
     { label: "Analytics", href: "/recruiter/analytics", icon: "bar_chart" },
+    { label: "Profile", href: "/recruiter/profile", icon: "manage_accounts" },
   ],
   admin: [
     { label: "Dashboard", href: "/admin/dashboard", icon: "admin_panel_settings" },

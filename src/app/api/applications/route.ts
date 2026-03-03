@@ -10,13 +10,24 @@ export async function GET(req: NextRequest) {
   const admin = getSupabaseAdmin();
 
   if (jobId) {
-    const { data, error } = await admin
+    const { data: apps, error } = await admin
       .from("applications")
-      .select("*, profiles!candidate_id(name, email)")
+      .select("*")
       .eq("job_id", jobId)
       .order("applied_at", { ascending: false });
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json(data);
+    if (!apps || apps.length === 0) return NextResponse.json([]);
+
+    // Manually join profiles (FK is to auth.users, not profiles)
+    const candidateIds = [...new Set(apps.map((a) => a.candidate_id))];
+    const { data: profiles } = await admin
+      .from("profiles")
+      .select("id, name, email")
+      .in("id", candidateIds);
+    const profileMap = Object.fromEntries((profiles ?? []).map((p) => [p.id, p]));
+
+    const merged = apps.map((a) => ({ ...a, profiles: profileMap[a.candidate_id] ?? null }));
+    return NextResponse.json(merged);
   }
 
   if (candidateId) {

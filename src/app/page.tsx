@@ -24,7 +24,7 @@ export default function Home() {
                   Automate screening and assessments with our advanced AI platform to find the best talent faster. Reduce time-to-hire by 70% while improving candidate quality.
                 </p>
                 <div className="animate-hero-fade-up animate-hero-delay-4 flex flex-col sm:flex-row gap-4">
-                  <Link href="/candidate/dashboard" className="bg-primary text-white px-8 py-4 rounded-xl text-lg font-bold hover:bg-blue-700 hover:scale-[1.03] active:scale-[0.98] transition-all duration-200 shadow-xl shadow-primary/25 flex items-center justify-center gap-2">
+                  <Link href="/signup" className="bg-primary text-white px-8 py-4 rounded-xl text-lg font-bold hover:bg-blue-700 hover:scale-[1.03] active:scale-[0.98] transition-all duration-200 shadow-xl shadow-primary/25 flex items-center justify-center gap-2">
                     Get Started for Free <span className="material-symbols-outlined">arrow_forward</span>
                   </Link>
                   <button className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-white px-8 py-4 rounded-xl text-lg font-bold hover:bg-slate-50 dark:hover:bg-slate-700 hover:scale-[1.03] active:scale-[0.98] transition-all duration-200 flex items-center justify-center gap-2">

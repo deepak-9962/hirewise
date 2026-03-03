@@ -44,9 +44,7 @@ export default function Header() {
                 {theme === "dark" ? "light_mode" : "dark_mode"}
               </span>
             </button>
-            {loading ? (
-              <div className="w-20 h-9 bg-slate-200 dark:bg-slate-700 rounded-lg animate-pulse"></div>
-            ) : user ? (
+            {!loading && user ? (
               <>
                 <span className="hidden sm:block text-sm text-slate-600 dark:text-slate-300">
                   {profile?.name || user.email}
@@ -71,7 +69,7 @@ export default function Header() {
                   Login
                 </Link>
                 <Link href="/signup" className="bg-primary text-white text-sm font-bold px-5 py-2.5 rounded-lg hover:bg-blue-700 transition-all shadow-md shadow-primary/20">
-                  Signup
+                  Sign Up
                 </Link>
               </>
             )}

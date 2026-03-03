@@ -21,7 +21,7 @@ export default function RecruiterReportsPage() {
   const handleSaveFeedback = async () => {
     if (!feedbackModal) return;
     setSavingFeedback(true);
-    await updateReport(feedbackModal.id, { feedback: feedbackText });
+    await updateReport(feedbackModal.id, { recruiter_feedback: feedbackText });
     setSavingFeedback(false);
     setFeedbackModal(null);
     setFeedbackText("");
@@ -76,7 +76,7 @@ export default function RecruiterReportsPage() {
                 const technical = r.technical_score ?? "—";
                 const communication = r.communication_score ?? "—";
                 const reasoning = r.reasoning_score ?? "—";
-                const hasFeedback = !!r.feedback;
+                const hasFeedback = !!r.recruiter_feedback;
                 const candidateName = r.profiles?.name ?? "Unknown";
                 const jobTitle = r.interviews?.jobs?.title ?? "—";
                 const date = new Date(r.generated_at ?? r.created_at).toLocaleDateString();
