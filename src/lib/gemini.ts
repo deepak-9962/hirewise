@@ -1,8 +1,22 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI, type GenerativeModel } from "@google/generative-ai";
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+let _model: GenerativeModel | null = null;
 
-export const geminiModel = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+function getModel(): GenerativeModel {
+  if (!_model) {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) throw new Error("Missing GEMINI_API_KEY");
+    const genAI = new GoogleGenerativeAI(apiKey);
+    _model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+  }
+  return _model;
+}
+
+export const geminiModel = new Proxy({} as GenerativeModel, {
+  get(_target, prop) {
+    return (getModel() as unknown as Record<string | symbol, unknown>)[prop];
+  },
+});
 
 export async function evaluateAnswer(question: string, answer: string, type: "descriptive" | "coding", skill: string, difficulty: string) {
   const prompt = type === "coding"
