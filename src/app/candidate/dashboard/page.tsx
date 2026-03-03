@@ -1,13 +1,17 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
-import { useCandidateInterviews, useCandidateReports } from "@/hooks/useSupabase";
+import { useCandidateInterviews, useCandidateReports, useOpenJobs, applyToJob } from "@/hooks/useSupabase";
 
 export default function CandidateDashboard() {
   const { user, profile } = useAuth();
-  const { data: interviews, loading: interviewsLoading } = useCandidateInterviews(user?.id);
+  const { data: interviews, loading: interviewsLoading, refetch: refetchInterviews } = useCandidateInterviews(user?.id);
   const { data: reports, loading: reportsLoading } = useCandidateReports(user?.id);
+  const { data: openJobsData, loading: jobsLoading, refetch: refetchJobs } = useOpenJobs();
+  const [applyingTo, setApplyingTo] = useState<string | null>(null);
+  const [applyMessage, setApplyMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const allInterviews = (interviews as Record<string, unknown>[] | null) || [];
   const upcoming = allInterviews.filter((i) => i.status === "scheduled");
@@ -20,6 +24,28 @@ export default function CandidateDashboard() {
 
   const isLoading = interviewsLoading || reportsLoading;
   const displayName = profile?.name || user?.email?.split("@")[0] || "there";
+
+  // Open jobs posted by recruiters (exclude jobs already applied to)
+  const appliedJobIds = new Set(allInterviews.map((i) => String(i.job_id)));
+  const openJobs = ((openJobsData as Record<string, unknown>[] | null) || []).filter(
+    (job) => !appliedJobIds.has(String(job.id))
+  );
+
+  const handleApply = async (jobId: string) => {
+    if (!user) return;
+    setApplyingTo(jobId);
+    setApplyMessage(null);
+    const { error } = await applyToJob(jobId, user.id);
+    if (error) {
+      setApplyMessage({ type: "error", text: typeof error === "string" ? error : "Failed to apply. Please try again." });
+    } else {
+      setApplyMessage({ type: "success", text: "Applied successfully! Check your upcoming interviews." });
+      refetchInterviews();
+      refetchJobs();
+    }
+    setApplyingTo(null);
+    setTimeout(() => setApplyMessage(null), 4000);
+  };
   return (
     <div className="animate-fade-in">
       {/* Header */}
@@ -51,6 +77,77 @@ export default function CandidateDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left column */}
         <div className="lg:col-span-2 space-y-6">
+          {/* Open Positions — Browse & Apply */}
+          <div className="bg-white dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700">
+            <div className="p-5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
+              <h2 className="font-bold text-slate-900 dark:text-white">Open Positions</h2>
+              <span className="text-xs text-slate-400">{openJobs.length} available</span>
+            </div>
+            {applyMessage && (
+              <div className={`mx-5 mt-4 px-4 py-2.5 rounded-lg text-sm font-medium ${applyMessage.type === "success" ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
+                {applyMessage.text}
+              </div>
+            )}
+            <div className="max-h-[420px] overflow-y-auto divide-y divide-slate-100 dark:divide-slate-700 scrollbar-thin">
+              {jobsLoading ? (
+                <div className="p-10 text-center text-slate-400">
+                  <span className="animate-spin material-symbols-outlined text-3xl">progress_activity</span>
+                  <p className="mt-2">Loading open positions...</p>
+                </div>
+              ) : openJobs.length > 0 ? openJobs.map((job) => (
+                <div key={String(job.id)} className="p-5 hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-start gap-4 min-w-0">
+                      <div className="size-12 rounded-xl bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center flex-shrink-0">
+                        <span className="material-symbols-outlined text-primary">work</span>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-semibold text-slate-900 dark:text-white truncate">{String(job.title)}</p>
+                        <p className="text-sm text-slate-500 mt-0.5">{String(job.department || "General")} · {String(job.type || "Full-time")}</p>
+                        {(job.target_skills as string[])?.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 mt-2">
+                            {(job.target_skills as string[]).slice(0, 4).map((skill) => (
+                              <span key={skill} className="bg-primary/10 text-primary text-[11px] font-medium px-2 py-0.5 rounded-full">{skill}</span>
+                            ))}
+                            {(job.target_skills as string[]).length > 4 && (
+                              <span className="text-[11px] text-slate-400">+{(job.target_skills as string[]).length - 4} more</span>
+                            )}
+                          </div>
+                        )}
+                        {job.description && (
+                          <p className="text-xs text-slate-400 mt-2 line-clamp-2">{String(job.description)}</p>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleApply(String(job.id))}
+                      disabled={applyingTo === String(job.id)}
+                      className="bg-primary text-white text-sm font-semibold px-4 py-2 rounded-lg hover:bg-blue-700 transition-all disabled:opacity-50 flex-shrink-0 flex items-center gap-1.5"
+                    >
+                      {applyingTo === String(job.id) ? (
+                        <>
+                          <span className="animate-spin material-symbols-outlined text-sm">progress_activity</span>
+                          Applying...
+                        </>
+                      ) : (
+                        <>
+                          <span className="material-symbols-outlined text-sm">send</span>
+                          Apply
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )) : (
+                <div className="p-10 text-center text-slate-400">
+                  <span className="material-symbols-outlined text-4xl mb-2">work_off</span>
+                  <p>No open positions right now</p>
+                  <p className="text-xs mt-1">Check back later for new opportunities</p>
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Upcoming Interviews */}
           <div className="bg-white dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700">
             <div className="p-5 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between">
@@ -82,6 +179,7 @@ export default function CandidateDashboard() {
                 <div className="p-10 text-center text-slate-400">
                   <span className="material-symbols-outlined text-4xl mb-2">event_busy</span>
                   <p>No upcoming interviews</p>
+                  <p className="text-xs mt-1">Apply to a position above to get started</p>
                 </div>
               )}
             </div>

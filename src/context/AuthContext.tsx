@@ -16,6 +16,12 @@ type Profile = {
   skills: string[];
   resume_url: string;
   avatar_url: string;
+  bio: string;
+  headline: string;
+  visibility: "public" | "private";
+  linkedin_url: string;
+  github_url: string;
+  portfolio_url: string;
 };
 
 type AuthContextType = {

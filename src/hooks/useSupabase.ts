@@ -72,6 +72,74 @@ export async function updateJob(id: string, updates: Record<string, unknown>) {
   return supabase.from("jobs").update(updates).eq("id", id);
 }
 
+// ── Open Jobs (for candidates) ──
+export function useOpenJobs() {
+  return useSupabaseQuery(
+    () =>
+      supabase
+        .from("jobs")
+        .select("*, profiles!recruiter_id(name, email)")
+        .eq("status", "active")
+        .order("created_at", { ascending: false }),
+    []
+  );
+}
+
+export async function applyToJob(jobId: string, candidateId: string) {
+  // Check if already applied
+  const { data: existing } = await supabase
+    .from("interviews")
+    .select("id")
+    .eq("job_id", jobId)
+    .eq("candidate_id", candidateId)
+    .maybeSingle();
+
+  if (existing) {
+    return { data: null, error: "You have already applied to this job." };
+  }
+
+  // Get question count for this job
+  const { count } = await supabase
+    .from("questions")
+    .select("id", { count: "exact", head: true })
+    .eq("job_id", jobId);
+
+  // Create interview
+  const { data, error } = await supabase
+    .from("interviews")
+    .insert({
+      job_id: jobId,
+      candidate_id: candidateId,
+      status: "scheduled",
+      scheduled_at: new Date().toISOString(),
+      total_questions: count ?? 0,
+    })
+    .select()
+    .single();
+
+  if (!error) {
+    // Increment applicants_count on the job
+    await supabase.rpc("increment_applicants", { job_id_input: jobId }).catch(() => {
+      // Fallback: manual increment if RPC doesn't exist
+      supabase
+        .from("jobs")
+        .select("applicants_count")
+        .eq("id", jobId)
+        .single()
+        .then(({ data: job }) => {
+          if (job) {
+            supabase
+              .from("jobs")
+              .update({ applicants_count: (job.applicants_count || 0) + 1 })
+              .eq("id", jobId);
+          }
+        });
+    });
+  }
+
+  return { data, error };
+}
+
 // ── Questions ──
 export function useQuestions(filter?: string) {
   return useSupabaseQuery(() => {
