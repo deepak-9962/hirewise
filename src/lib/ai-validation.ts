@@ -60,6 +60,17 @@ export const GeneratedQuestionSchema = z.array(
   })
 );
 
+export const ResumeScoreSchema = z.object({
+  overall_score: z.number().min(0).max(100),
+  skill_match_score: z.number().min(0).max(100),
+  experience_score: z.number().min(0).max(100),
+  education_score: z.number().min(0).max(100),
+  keyword_matches: z.array(z.string()),
+  missing_skills: z.array(z.string()),
+  recommendation: z.enum(["strong_match", "good_match", "partial_match", "weak_match"]),
+  summary: z.string(),
+});
+
 // ── Inferred types ─────────────────────────────────────────
 
 export type CodingEvaluation = z.infer<typeof CodingEvaluationSchema>;
@@ -67,6 +78,7 @@ export type DescriptiveEvaluation = z.infer<typeof DescriptiveEvaluationSchema>;
 export type Report = z.infer<typeof ReportSchema>;
 export type CodeRun = z.infer<typeof CodeRunSchema>;
 export type GeneratedQuestion = z.infer<typeof GeneratedQuestionSchema>[number];
+export type ResumeScore = z.infer<typeof ResumeScoreSchema>;
 
 // ── Fallback objects ───────────────────────────────────────
 
@@ -107,6 +119,17 @@ export const FALLBACK_CODE_RUN: CodeRun = {
   hasError: true,
   errorMessage: "Code analysis temporarily unavailable.",
   executionTime: "0ms",
+};
+
+export const FALLBACK_RESUME_SCORE: ResumeScore = {
+  overall_score: 0,
+  skill_match_score: 0,
+  experience_score: 0,
+  education_score: 0,
+  keyword_matches: [],
+  missing_skills: [],
+  recommendation: "weak_match",
+  summary: "Resume scoring temporarily unavailable. Please try again.",
 };
 
 // ── JSON cleaning ──────────────────────────────────────────

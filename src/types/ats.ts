@@ -143,6 +143,7 @@ export interface PipelineApplication {
     overall_score: number | null;
     ai_summary: string;
   } | null;
+  resume_score?: ResumeScoreData | null;
   notes?: PipelineNote[];
 }
 
@@ -163,8 +164,24 @@ export interface PipelineStats {
   conversionRate: number; // applied → hired %
 }
 
+export interface ResumeScoreData {
+  id: string;
+  application_id: string;
+  job_id: string;
+  candidate_id: string;
+  overall_score: number;
+  skill_match_score: number;
+  experience_score: number;
+  education_score: number;
+  keyword_matches: string[];
+  missing_skills: string[];
+  recommendation: string;
+  ai_summary: string;
+  scored_at: string;
+}
+
 export type ATSViewMode = "kanban" | "list";
-export type ATSSortBy = "applied_at" | "name" | "score" | "status";
+export type ATSSortBy = "applied_at" | "name" | "score" | "status" | "ats_score";
 export type ATSSortOrder = "asc" | "desc";
 
 export interface ATSFilters {

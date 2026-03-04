@@ -34,7 +34,9 @@ export async function GET(req: NextRequest) {
   const candidateIds = [...new Set(applications.map((a: any) => a.candidate_id).filter(Boolean))];
   const jobIds = [...new Set(applications.map((a: any) => a.job_id).filter(Boolean))];
 
-  const [profilesRes, jobsRes, interviewsRes, reportsRes, notesRes] = await Promise.all([
+  const appIds = applications.map((a: any) => a.id);
+
+  const [profilesRes, jobsRes, interviewsRes, reportsRes, notesRes, resumeScoresRes] = await Promise.all([
     candidateIds.length > 0
       ? admin.from("profiles").select("id, name, email, phone, skills, experience, location, resume_url, avatar_url").in("id", candidateIds)
       : { data: [] },
@@ -42,16 +44,19 @@ export async function GET(req: NextRequest) {
       ? admin.from("jobs").select("id, title, department, type, status, target_skills, recruiter_id").in("id", jobIds)
       : { data: [] },
     admin.from("interviews").select("id, application_id, status, score, completed_at").in(
-      "application_id",
-      applications.map((a: any) => a.id)
+      "application_id", appIds
     ),
     admin.from("reports").select("id, candidate_id, overall_score, ai_summary").in("candidate_id", candidateIds),
     admin.from("pipeline_notes").select("*").in(
-      "application_id",
-      applications.map((a: any) => a.id)
+      "application_id", appIds
     ).order("created_at", { ascending: false }).then(
       (res) => res,
-      // If table doesn't exist yet, return empty
+      () => ({ data: [], error: null })
+    ),
+    admin.from("resume_scores").select("id, application_id, job_id, candidate_id, overall_score, skill_match_score, experience_score, education_score, keyword_matches, missing_skills, recommendation, ai_summary, scored_at").in(
+      "application_id", appIds
+    ).then(
+      (res) => res,
       () => ({ data: [], error: null })
     ),
   ]);
@@ -68,6 +73,7 @@ export async function GET(req: NextRequest) {
     if (!notesMap.has(n.application_id)) notesMap.set(n.application_id, []);
     notesMap.get(n.application_id)!.push(n);
   }
+  const resumeScoreMap = new Map((resumeScoresRes.data ?? []).map((s: any) => [s.application_id, s]));
 
   // Filter by recruiter's jobs if needed
   let filteredJobIds: Set<string> | null = null;
@@ -84,6 +90,7 @@ export async function GET(req: NextRequest) {
     jobs: jobMap.get(app.job_id) ?? null,
     interviews: interviewMap.get(app.id) ?? null,
     reports: reportMap.get(app.candidate_id) ?? null,
+    resume_score: resumeScoreMap.get(app.id) ?? null,
     notes: notesMap.get(app.id) ?? [],
   }));
 

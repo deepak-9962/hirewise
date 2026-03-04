@@ -15,6 +15,22 @@ import {
 } from "@/types/ats";
 import CandidatePanel from "./CandidatePanel";
 
+function getScoreColor(score: number) {
+  if (score >= 80) return "text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800";
+  if (score >= 60) return "text-amber-600 bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800";
+  return "text-red-500 bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800";
+}
+
+function getRecommendationBadge(rec: string) {
+  const map: Record<string, { label: string; color: string }> = {
+    strong_match: { label: "Strong", color: "text-emerald-700 bg-emerald-100 dark:bg-emerald-900/30" },
+    good_match: { label: "Good", color: "text-blue-700 bg-blue-100 dark:bg-blue-900/30" },
+    partial_match: { label: "Partial", color: "text-amber-700 bg-amber-100 dark:bg-amber-900/30" },
+    weak_match: { label: "Weak", color: "text-red-700 bg-red-100 dark:bg-red-900/30" },
+  };
+  return map[rec] ?? { label: rec, color: "text-slate-600 bg-slate-100" };
+}
+
 export default function ATSPipelinePage() {
   const { user } = useAuth();
   const { data: jobsData } = useJobs();
@@ -29,6 +45,7 @@ export default function ATSPipelinePage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkStage, setBulkStage] = useState<PipelineStage>("under_review");
   const [draggedApp, setDraggedApp] = useState<string | null>(null);
+  const [scoringIds, setScoringIds] = useState<Set<string>>(new Set());
 
   const [filters, setFilters] = useState<ATSFilters>({
     jobId: "all",
@@ -81,6 +98,9 @@ export default function ATSPipelinePage() {
           break;
         case "score":
           cmp = (a.interviews?.score ?? 0) - (b.interviews?.score ?? 0);
+          break;
+        case "ats_score":
+          cmp = (a.resume_score?.overall_score ?? -1) - (b.resume_score?.overall_score ?? -1);
           break;
         case "status":
           cmp = PIPELINE_STAGES.indexOf(a.status) - PIPELINE_STAGES.indexOf(b.status);
@@ -174,6 +194,55 @@ export default function ATSPipelinePage() {
       moveToStage(draggedApp, stage);
       setDraggedApp(null);
     }
+  };
+
+  // Score a single resume
+  const scoreOneResume = async (appId: string) => {
+    setScoringIds((prev) => new Set(prev).add(appId));
+    try {
+      const res = await fetch("/api/ai/resume-score", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ application_id: appId }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const score = data.scores?.[0];
+        if (score) {
+          setApplications((prev) =>
+            prev.map((a) => (a.id === appId ? { ...a, resume_score: score } : a))
+          );
+          if (selectedApp?.id === appId) {
+            setSelectedApp((prev) => prev ? { ...prev, resume_score: score } : null);
+          }
+        }
+      }
+    } catch { /* ignore */ }
+    setScoringIds((prev) => {
+      const next = new Set(prev);
+      next.delete(appId);
+      return next;
+    });
+  };
+
+  // Score all selected resumes
+  const scoreSelectedResumes = async () => {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    for (const id of ids) {
+      setScoringIds((prev) => new Set(prev).add(id));
+    }
+    try {
+      const res = await fetch("/api/ai/resume-score", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ application_ids: ids }),
+      });
+      if (res.ok) {
+        await fetchPipeline();
+      }
+    } catch { /* ignore */ }
+    setScoringIds(new Set());
   };
 
   // Active (non-terminal) stages for Kanban
@@ -281,6 +350,8 @@ export default function ATSPipelinePage() {
           <option value="name-desc">Name Z-A</option>
           <option value="score-desc">Highest score</option>
           <option value="score-asc">Lowest score</option>
+          <option value="ats_score-desc">ATS Score ↓</option>
+          <option value="ats_score-asc">ATS Score ↑</option>
         </select>
 
         {/* Bulk actions */}
@@ -309,6 +380,14 @@ export default function ATSPipelinePage() {
               className="text-xs text-slate-400 hover:text-slate-600"
             >
               Clear
+            </button>
+            <button
+              onClick={scoreSelectedResumes}
+              disabled={scoringIds.size > 0}
+              className="text-xs font-bold bg-violet-600 text-white px-3 py-1 rounded-lg hover:bg-violet-700 disabled:opacity-50 flex items-center gap-1"
+            >
+              <span className="material-symbols-outlined text-xs">auto_awesome</span>
+              {scoringIds.size > 0 ? "Scoring..." : "Score All"}
             </button>
           </div>
         )}
@@ -369,9 +448,11 @@ export default function ATSPipelinePage() {
                           app={app}
                           isSelected={selectedIds.has(app.id)}
                           isLoading={actionLoading === app.id}
+                          isScoring={scoringIds.has(app.id)}
                           onSelect={() => toggleSelection(app.id)}
                           onClick={() => setSelectedApp(app)}
                           onDragStart={() => handleDragStart(app.id)}
+                          onScoreResume={() => scoreOneResume(app.id)}
                         />
                       ))
                     )}
@@ -404,9 +485,11 @@ export default function ATSPipelinePage() {
                       app={app}
                       isSelected={selectedIds.has(app.id)}
                       isLoading={actionLoading === app.id}
+                      isScoring={scoringIds.has(app.id)}
                       onSelect={() => toggleSelection(app.id)}
                       onClick={() => setSelectedApp(app)}
                       onDragStart={() => handleDragStart(app.id)}
+                      onScoreResume={() => scoreOneResume(app.id)}
                       compact
                     />
                   ))}
@@ -419,7 +502,7 @@ export default function ATSPipelinePage() {
         /* ── List View ── */
         <div className="bg-white dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
           {/* Header */}
-          <div className="grid grid-cols-[40px_1fr_1fr_120px_100px_140px] gap-3 px-4 py-3 bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-500 uppercase tracking-wider">
+          <div className="grid grid-cols-[40px_1fr_1fr_120px_80px_80px_140px] gap-3 px-4 py-3 bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-500 uppercase tracking-wider">
             <div>
               <input
                 type="checkbox"
@@ -438,6 +521,7 @@ export default function ATSPipelinePage() {
             <div>Job</div>
             <div>Stage</div>
             <div>Score</div>
+            <div>ATS</div>
             <div>Applied</div>
           </div>
 
@@ -448,7 +532,7 @@ export default function ATSPipelinePage() {
               return (
                 <div
                   key={app.id}
-                  className="grid grid-cols-[40px_1fr_1fr_120px_100px_140px] gap-3 px-4 py-3 items-center hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer group"
+                  className="grid grid-cols-[40px_1fr_1fr_120px_80px_80px_140px] gap-3 px-4 py-3 items-center hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors cursor-pointer group"
                   onClick={() => setSelectedApp(app)}
                 >
                   <div onClick={(e) => e.stopPropagation()}>
@@ -491,6 +575,24 @@ export default function ATSPipelinePage() {
                       <span className="text-xs text-slate-400">—</span>
                     )}
                   </div>
+                  <div>
+                    {app.resume_score ? (
+                      <span className={`text-sm font-bold ${
+                        app.resume_score.overall_score >= 80 ? "text-emerald-600" :
+                        app.resume_score.overall_score >= 60 ? "text-amber-600" : "text-red-500"
+                      }`}>
+                        {app.resume_score.overall_score}%
+                      </span>
+                    ) : (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); scoreOneResume(app.id); }}
+                        disabled={scoringIds.has(app.id)}
+                        className="text-[10px] text-violet-600 hover:text-violet-800 font-medium"
+                      >
+                        {scoringIds.has(app.id) ? "..." : "Score"}
+                      </button>
+                    )}
+                  </div>
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-slate-500">
                       {new Date(app.applied_at).toLocaleDateString()}
@@ -525,17 +627,21 @@ function KanbanCard({
   app,
   isSelected,
   isLoading,
+  isScoring,
   onSelect,
   onClick,
   onDragStart,
+  onScoreResume,
   compact,
 }: {
   app: PipelineApplication;
   isSelected: boolean;
   isLoading: boolean;
+  isScoring: boolean;
   onSelect: () => void;
   onClick: () => void;
   onDragStart: () => void;
+  onScoreResume: () => void;
   compact?: boolean;
 }) {
   return (
@@ -545,7 +651,7 @@ function KanbanCard({
         e.dataTransfer.effectAllowed = "move";
         onDragStart();
       }}
-      className={`bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-3 cursor-grab active:cursor-grabbing hover:shadow-md transition-all ${
+      className={`bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-3 cursor-grab active:cursor-grabbing hover:shadow-md transition-all group/card ${
         isSelected ? "ring-2 ring-primary" : ""
       } ${isLoading ? "opacity-50 pointer-events-none" : ""}`}
     >
@@ -561,9 +667,29 @@ function KanbanCard({
           className="rounded mt-0.5 shrink-0"
         />
         <div className="flex-1 min-w-0" onClick={onClick}>
-          <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">
-            {app.profiles?.name ?? "Unknown"}
-          </p>
+          <div className="flex items-center justify-between gap-1">
+            <p className="text-sm font-semibold text-slate-900 dark:text-white truncate">
+              {app.profiles?.name ?? "Unknown"}
+            </p>
+            {/* ATS Score badge */}
+            {app.resume_score ? (
+              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full border shrink-0 ${getScoreColor(app.resume_score.overall_score)}`}>
+                {app.resume_score.overall_score}
+              </span>
+            ) : (
+              <button
+                onClick={(e) => { e.stopPropagation(); onScoreResume(); }}
+                disabled={isScoring}
+                className="opacity-0 group-hover/card:opacity-100 transition-opacity text-[10px] text-violet-600 hover:text-violet-800 font-medium px-1.5 py-0.5 rounded bg-violet-50 dark:bg-violet-900/20 shrink-0"
+              >
+                {isScoring ? (
+                  <span className="material-symbols-outlined text-xs animate-spin">progress_activity</span>
+                ) : (
+                  <span className="flex items-center gap-0.5"><span className="material-symbols-outlined text-xs">auto_awesome</span>ATS</span>
+                )}
+              </button>
+            )}
+          </div>
           {!compact && (
             <>
               <p className="text-xs text-slate-400 truncate mt-0.5">
@@ -599,12 +725,19 @@ function KanbanCard({
                 <span className="text-[10px] text-slate-400">
                   {new Date(app.applied_at).toLocaleDateString()}
                 </span>
-                {(app.notes?.length ?? 0) > 0 && (
-                  <span className="text-[10px] text-slate-400 flex items-center gap-0.5">
-                    <span className="material-symbols-outlined text-xs">chat_bubble</span>
-                    {app.notes!.length}
-                  </span>
-                )}
+                <div className="flex items-center gap-2">
+                  {app.resume_score && (
+                    <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${getRecommendationBadge(app.resume_score.recommendation).color}`}>
+                      {getRecommendationBadge(app.resume_score.recommendation).label}
+                    </span>
+                  )}
+                  {(app.notes?.length ?? 0) > 0 && (
+                    <span className="text-[10px] text-slate-400 flex items-center gap-0.5">
+                      <span className="material-symbols-outlined text-xs">chat_bubble</span>
+                      {app.notes!.length}
+                    </span>
+                  )}
+                </div>
               </div>
             </>
           )}

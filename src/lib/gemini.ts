@@ -11,9 +11,11 @@ import {
   DescriptiveEvaluationSchema,
   ReportSchema,
   GeneratedQuestionSchema,
+  ResumeScoreSchema,
   FALLBACK_CODING_EVALUATION,
   FALLBACK_DESCRIPTIVE_EVALUATION,
   FALLBACK_REPORT,
+  FALLBACK_RESUME_SCORE,
   parseAIResponse,
 } from "@/lib/ai-validation";
 import { sanitizeInput } from "@/lib/ai-sanitize";
@@ -217,5 +219,64 @@ Make at least ${Math.ceil(count / 3)} coding questions. Cover different difficul
 
   console.warn("[generateQuestions] Validation failed, returning empty:", result.errors);
   return [];
+}
+
+// ── scoreResume ────────────────────────────────────────────
+
+export async function scoreResume(
+  resumeText: string,
+  jobTitle: string,
+  jobDescription: string,
+  targetSkills: string[],
+  candidateSkills: string[],
+) {
+  const safeResume = sanitizeInput(resumeText, 6000);
+  const safeTitle = sanitizeInput(jobTitle, 200);
+  const safeDesc = sanitizeInput(jobDescription, 2000);
+  const skillList = targetSkills.map((s) => sanitizeInput(s, 100)).join(", ") || "general";
+  const candSkills = candidateSkills.map((s) => sanitizeInput(s, 100)).join(", ") || "not specified";
+
+  const prompt = `You are an expert ATS (Applicant Tracking System) resume analyzer.
+
+JOB DETAILS:
+Title: ${safeTitle}
+Description: ${safeDesc}
+Required Skills: ${skillList}
+
+CANDIDATE:
+Listed Skills: ${candSkills}
+Resume Text:
+"""
+${safeResume}
+"""
+
+TASK: Analyze this resume against the job requirements. Score each dimension 0-100.
+
+Scoring guidelines:
+- skill_match_score: How well candidate skills match required skills (keyword overlap + synonyms)
+- experience_score: Relevance and depth of work experience for this role
+- education_score: Relevance of education and certifications
+- overall_score: Weighted average (50% skill_match + 30% experience + 20% education)
+
+Respond in STRICT JSON format only (no markdown, no explanation, no code fences):
+{
+  "overall_score": <number 0-100>,
+  "skill_match_score": <number 0-100>,
+  "experience_score": <number 0-100>,
+  "education_score": <number 0-100>,
+  "keyword_matches": ["<matched skill 1>", "<matched skill 2>"],
+  "missing_skills": ["<missing required skill 1>", "<missing required skill 2>"],
+  "recommendation": "<strong_match|good_match|partial_match|weak_match>",
+  "summary": "<2-3 sentence assessment of fit>"
+}`;
+
+  const raw = await aiGenerate(prompt, { skipCache: true });
+  const retryFn = async () => aiGenerate(prompt, { skipCache: true });
+  const result = await parseAIResponse(raw, ResumeScoreSchema, retryFn);
+
+  if (result.valid) return result.data;
+
+  console.warn("[scoreResume] Validation failed, using fallback:", result.errors);
+  return FALLBACK_RESUME_SCORE;
 }
 

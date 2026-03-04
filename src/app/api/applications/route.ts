@@ -94,7 +94,12 @@ export async function POST(req: NextRequest) {
 
   const { data, error } = await admin
     .from("applications")
-    .insert({ job_id, candidate_id, cover_note, status: "applied" })
+    .insert({
+      job_id,
+      candidate_id,
+      cover_note,
+      status: "applied",
+    })
     .select()
     .single();
 
@@ -103,6 +108,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Already applied to this job" }, { status: 409 });
     }
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  // Increment applicants_count on the job
+  const { data: jobRow } = await admin
+    .from("jobs")
+    .select("applicants_count")
+    .eq("id", job_id)
+    .single();
+
+  if (jobRow) {
+    await admin
+      .from("jobs")
+      .update({ applicants_count: ((jobRow as any).applicants_count || 0) + 1 })
+      .eq("id", job_id);
   }
 
   return NextResponse.json(data, { status: 201 });
