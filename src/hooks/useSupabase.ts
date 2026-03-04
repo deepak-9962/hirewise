@@ -1,28 +1,83 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { createClient } from "@/lib/supabase-browser";
 import { useAuth } from "@/context/AuthContext";
 
 const supabase = createClient();
 
+// ── Helper: try FK join, fall back to manual join ──
+async function queryWithFallback<T>(
+  primaryQuery: () => PromiseLike<{ data: T | null; error: any }>,
+  fallbackQuery: () => PromiseLike<{ data: T | null; error: any }>
+): Promise<{ data: T | null; error: any }> {
+  const result = await primaryQuery();
+  // If 400 error (usually FK join issue), try fallback
+  if (result.error && String(result.error?.code ?? result.error?.message ?? result.error).includes("400")) {
+    return fallbackQuery();
+  }
+  // Also check for "Could not find a relationship" type PostgREST errors
+  if (result.error && /relationship|foreign key|hint/i.test(String(result.error?.message ?? ""))) {
+    return fallbackQuery();
+  }
+  return result;
+}
+
+async function enrichWithProfiles<T extends Record<string, any>>(
+  items: T[],
+  idField: string
+): Promise<(T & { profiles: any })[]> {
+  const ids = [...new Set(items.map((i) => i[idField]).filter(Boolean))];
+  if (ids.length === 0) return items.map((i) => ({ ...i, profiles: null }));
+  const { data: profiles } = await supabase.from("profiles").select("id, name, email").in("id", ids);
+  const map = new Map((profiles ?? []).map((p: any) => [p.id, p]));
+  return items.map((i) => ({ ...i, profiles: map.get(i[idField]) ?? null }));
+}
+
+async function enrichWithJobs<T extends Record<string, any>>(
+  items: T[],
+  idField: string,
+  fields = "id, title, department, type, status, target_skills"
+): Promise<(T & { jobs: any })[]> {
+  const ids = [...new Set(items.map((i) => i[idField]).filter(Boolean))];
+  if (ids.length === 0) return items.map((i) => ({ ...i, jobs: null }));
+  const { data: jobs } = await supabase.from("jobs").select(fields).in("id", ids);
+  const map = new Map((jobs ?? []).map((j: any) => [j.id, j]));
+  return items.map((i) => ({ ...i, jobs: map.get(i[idField]) ?? null }));
+}
+
 // ── Generic fetch helper ──
 export function useSupabaseQuery<T>(
   queryFn: () => PromiseLike<{ data: T | null; error: unknown }>,
-  deps: unknown[] = []
+  deps: unknown[] = [],
+  options: { enabled?: boolean } = {}
 ) {
+  const { enabled = true } = options;
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Always use latest queryFn via ref (avoids stale closure issues)
+  const queryFnRef = useRef(queryFn);
+  queryFnRef.current = queryFn;
+
   const refetch = useCallback(async () => {
+    if (!enabled) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
-    const { data, error } = await queryFn();
-    if (error) setError(String(error));
-    else setData(data);
+    setError(null);
+    try {
+      const { data, error } = await queryFnRef.current();
+      if (error) setError(String(error));
+      else setData(data);
+    } catch (err) {
+      setError(String(err));
+    }
     setLoading(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, deps);
+  }, [...deps, enabled]);
 
   useEffect(() => {
     refetch();
@@ -35,8 +90,9 @@ export function useSupabaseQuery<T>(
 export function useProfile() {
   const { user } = useAuth();
   return useSupabaseQuery(
-    () => supabase.from("profiles").select("*").eq("id", user?.id ?? "").single(),
-    [user?.id]
+    () => supabase.from("profiles").select("*").eq("id", user!.id).single(),
+    [user?.id],
+    { enabled: !!user?.id }
   );
 }
 
@@ -59,20 +115,36 @@ export function useJobs(status?: string) {
 
 export function useJobById(id?: string) {
   return useSupabaseQuery(
-    () => supabase.from("jobs").select("*").eq("id", id ?? "").single(),
-    [id]
+    () => supabase.from("jobs").select("*").eq("id", id!).single(),
+    [id],
+    { enabled: !!id }
   );
 }
 
 export function useInterviewsByJob(jobId?: string) {
   return useSupabaseQuery(
-    () =>
-      supabase
-        .from("interviews")
-        .select("*, profiles!candidate_id(name, email)")
-        .eq("job_id", jobId ?? "")
-        .order("created_at", { ascending: false }),
-    [jobId]
+    async () => {
+      return queryWithFallback(
+        () =>
+          supabase
+            .from("interviews")
+            .select("*, profiles!candidate_id(name, email)")
+            .eq("job_id", jobId!)
+            .order("created_at", { ascending: false }),
+        async () => {
+          const { data, error } = await supabase
+            .from("interviews")
+            .select("*")
+            .eq("job_id", jobId!)
+            .order("created_at", { ascending: false });
+          if (error || !data) return { data, error };
+          const enriched = await enrichWithProfiles(data, "candidate_id");
+          return { data: enriched as any, error: null };
+        }
+      );
+    },
+    [jobId],
+    { enabled: !!jobId }
   );
 }
 
@@ -112,53 +184,57 @@ export async function deleteJob(id: string) {
 
 // ── Applications ──
 export function useApplications(jobId?: string) {
-  const [data, setData] = useState<any[] | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const refetch = useCallback(async () => {
-    if (!jobId) { setData([]); setLoading(false); return; }
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/applications?job_id=${jobId}`);
-      const json = await res.json();
-      if (!res.ok) { setError(json.error ?? "Failed"); setData([]); }
-      else setData(Array.isArray(json) ? json : []);
-    } catch (e: any) {
-      setError(e?.message ?? "Network error");
-      setData([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [jobId]);
-
-  useEffect(() => { refetch(); }, [refetch]);
-  return { data, loading, error, refetch };
+  return useSupabaseQuery(
+    async () => {
+      return queryWithFallback(
+        () =>
+          supabase
+            .from("applications")
+            .select("*, profiles!candidate_id(name, email)")
+            .eq("job_id", jobId!)
+            .order("applied_at", { ascending: false }),
+        async () => {
+          const { data, error } = await supabase
+            .from("applications")
+            .select("*")
+            .eq("job_id", jobId!)
+            .order("applied_at", { ascending: false });
+          if (error || !data) return { data, error };
+          const enriched = await enrichWithProfiles(data, "candidate_id");
+          return { data: enriched as any, error: null };
+        }
+      );
+    },
+    [jobId],
+    { enabled: !!jobId }
+  );
 }
 
 export function useCandidateApplications(userId?: string) {
-  const [data, setData] = useState<any[] | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const refetch = useCallback(async () => {
-    if (!userId) { setData([]); setLoading(false); return; }
-    setLoading(true);
-    try {
-      const res = await fetch(`/api/applications?candidate_id=${userId}`);
-      const json = await res.json();
-      if (!res.ok) { setError(json.error ?? "Failed"); setData([]); }
-      else setData(Array.isArray(json) ? json : []);
-    } catch (e: any) {
-      setError(e?.message ?? "Network error");
-      setData([]);
-    } finally {
-      setLoading(false);
-    }
-  }, [userId]);
-
-  useEffect(() => { refetch(); }, [refetch]);
-  return { data, loading, error, refetch };
+  return useSupabaseQuery(
+    async () => {
+      return queryWithFallback(
+        () =>
+          supabase
+            .from("applications")
+            .select("*, jobs(id, title, department, type, status, target_skills)")
+            .eq("candidate_id", userId!)
+            .order("applied_at", { ascending: false }),
+        async () => {
+          const { data, error } = await supabase
+            .from("applications")
+            .select("*")
+            .eq("candidate_id", userId!)
+            .order("applied_at", { ascending: false });
+          if (error || !data) return { data, error };
+          const enriched = await enrichWithJobs(data, "job_id");
+          return { data: enriched as any, error: null };
+        }
+      );
+    },
+    [userId],
+    { enabled: !!userId }
+  );
 }
 
 export async function createApplication(jobId: string, candidateId: string, coverNote?: string) {
@@ -197,13 +273,26 @@ export async function createInterview(applicationId: string, candidateId: string
 // ── Job Questions ──
 export function useJobQuestions(jobId?: string) {
   return useSupabaseQuery(
-    () =>
-      supabase
-        .from("job_questions")
-        .select("*, questions(*)")
-        .eq("job_id", jobId ?? "")
-        .order("order_index", { ascending: true }),
-    [jobId]
+    async () => {
+      return queryWithFallback(
+        () =>
+          supabase
+            .from("job_questions")
+            .select("*, questions(*)")
+            .eq("job_id", jobId!)
+            .order("order_index", { ascending: true }),
+        async () => {
+          const { data, error } = await supabase
+            .from("job_questions")
+            .select("*")
+            .eq("job_id", jobId!)
+            .order("order_index", { ascending: true });
+          return { data, error };
+        }
+      );
+    },
+    [jobId],
+    { enabled: !!jobId }
   );
 }
 
@@ -268,12 +357,24 @@ export function useApplicationStats() {
 // ── Open Jobs (for candidates) ──
 export function useOpenJobs() {
   return useSupabaseQuery(
-    () =>
-      supabase
-        .from("jobs")
-        .select("*, profiles!recruiter_id(name, email)")
-        .eq("status", "active")
-        .order("created_at", { ascending: false }),
+    async () => {
+      return queryWithFallback(
+        () =>
+          supabase
+            .from("jobs")
+            .select("*, profiles!recruiter_id(name, email)")
+            .eq("status", "active")
+            .order("created_at", { ascending: false }),
+        async () => {
+          const { data, error } = await supabase
+            .from("jobs")
+            .select("*")
+            .eq("status", "active")
+            .order("created_at", { ascending: false });
+          return { data, error };
+        }
+      );
+    },
     []
   );
 }
@@ -364,25 +465,59 @@ export async function deleteQuestion(id: string) {
 // ── Interviews ──
 export function useCandidateInterviews(candidateId?: string) {
   return useSupabaseQuery(
-    () =>
-      supabase
-        .from("interviews")
-        .select("*, jobs(title, department)")
-        .eq("candidate_id", candidateId ?? "")
-        .order("scheduled_at", { ascending: false }),
-    [candidateId]
+    async () => {
+      return queryWithFallback(
+        () =>
+          supabase
+            .from("interviews")
+            .select("*, jobs(title, department)")
+            .eq("candidate_id", candidateId!)
+            .order("scheduled_at", { ascending: false }),
+        async () => {
+          const { data, error } = await supabase
+            .from("interviews")
+            .select("*")
+            .eq("candidate_id", candidateId!)
+            .order("scheduled_at", { ascending: false });
+          if (error || !data) return { data, error };
+          const enriched = await enrichWithJobs(data, "job_id", "id, title, department");
+          return { data: enriched as any, error: null };
+        }
+      );
+    },
+    [candidateId],
+    { enabled: !!candidateId }
   );
 }
 
 export function useAllInterviews(status?: string) {
-  return useSupabaseQuery(() => {
-    let q = supabase
-      .from("interviews")
-      .select("*, profiles!candidate_id(name, email), jobs(title)")
-      .order("created_at", { ascending: false });
-    if (status && status !== "all") q = q.eq("status", status);
-    return q;
-  }, [status]);
+  return useSupabaseQuery(
+    async () => {
+      return queryWithFallback(
+        () => {
+          let q = supabase
+            .from("interviews")
+            .select("*, profiles!candidate_id(name, email), jobs(title)")
+            .order("created_at", { ascending: false });
+          if (status && status !== "all") q = q.eq("status", status);
+          return q;
+        },
+        async () => {
+          let q = supabase
+            .from("interviews")
+            .select("*")
+            .order("created_at", { ascending: false });
+          if (status && status !== "all") q = q.eq("status", status);
+          const { data, error } = await q;
+          if (error || !data) return { data, error };
+          const withProfiles = await enrichWithProfiles(data, "candidate_id");
+          const withJobs = await enrichWithJobs(withProfiles, "job_id", "id, title");
+          return { data: withJobs as any, error: null };
+        }
+      );
+    },
+    [status]
+  );
 }
 
 export async function updateInterview(id: string, updates: Record<string, unknown>) {
@@ -392,13 +527,26 @@ export async function updateInterview(id: string, updates: Record<string, unknow
 // ── Interview Responses ──
 export function useInterviewResponses(interviewId?: string) {
   return useSupabaseQuery(
-    () =>
-      supabase
-        .from("interview_responses")
-        .select("*, questions(*)")
-        .eq("interview_id", interviewId ?? "")
-        .order("created_at", { ascending: true }),
-    [interviewId]
+    async () => {
+      return queryWithFallback(
+        () =>
+          supabase
+            .from("interview_responses")
+            .select("*, questions(*)")
+            .eq("interview_id", interviewId!)
+            .order("created_at", { ascending: true }),
+        async () => {
+          const { data, error } = await supabase
+            .from("interview_responses")
+            .select("*")
+            .eq("interview_id", interviewId!)
+            .order("created_at", { ascending: true });
+          return { data, error };
+        }
+      );
+    },
+    [interviewId],
+    { enabled: !!interviewId }
   );
 }
 
@@ -418,35 +566,50 @@ export async function upsertResponse(response: {
 // ── Reports ──
 export function useCandidateReports(candidateId?: string) {
   return useSupabaseQuery(
-    () =>
-      supabase
-        .from("reports")
-        .select("*, interviews(*, jobs(title, department))")
-        .eq("candidate_id", candidateId ?? "")
-        .order("generated_at", { ascending: false }),
-    [candidateId]
+    async () => {
+      return queryWithFallback(
+        () =>
+          supabase
+            .from("reports")
+            .select("*, interviews(*, jobs(title, department))")
+            .eq("candidate_id", candidateId!)
+            .order("generated_at", { ascending: false }),
+        async () => {
+          const { data, error } = await supabase
+            .from("reports")
+            .select("*")
+            .eq("candidate_id", candidateId!)
+            .order("generated_at", { ascending: false });
+          return { data, error };
+        }
+      );
+    },
+    [candidateId],
+    { enabled: !!candidateId }
   );
 }
 
 export function useAllReports() {
-  const [data, setData] = useState<any[] | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const refetch = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/reports/all");
-      const json = await res.json();
-      if (!res.ok) { setError(json.error ?? "Failed"); setData([]); }
-      else setData(Array.isArray(json) ? json : []);
-    } catch (e: any) {
-      setError(e?.message ?? "Network error"); setData([]);
-    } finally { setLoading(false); }
-  }, []);
-
-  useEffect(() => { refetch(); }, [refetch]);
-  return { data, loading, error, refetch };
+  return useSupabaseQuery(
+    async () => {
+      return queryWithFallback(
+        () =>
+          supabase
+            .from("reports")
+            .select("*, profiles!candidate_id(name, email), interviews(*, jobs(title))")
+            .order("generated_at", { ascending: false }),
+        async () => {
+          const { data, error } = await supabase
+            .from("reports")
+            .select("*")
+            .order("generated_at", { ascending: false });
+          if (error || !data) return { data, error };
+          const enriched = await enrichWithProfiles(data, "candidate_id");
+          return { data: enriched as any, error: null };
+        }
+      );
+    }
+  );
 }
 
 export async function updateReport(id: string, updates: Record<string, unknown>) {
@@ -479,11 +642,25 @@ export function useRecruiterAnalytics() {
 
 // ── Bias Alerts ──
 export function useBiasAlerts() {
-  return useSupabaseQuery(() =>
-    supabase
-      .from("bias_alerts")
-      .select("*, profiles!candidate_id(name)")
-      .order("created_at", { ascending: false })
+  return useSupabaseQuery(
+    async () => {
+      return queryWithFallback(
+        () =>
+          supabase
+            .from("bias_alerts")
+            .select("*, profiles!candidate_id(name)")
+            .order("created_at", { ascending: false }),
+        async () => {
+          const { data, error } = await supabase
+            .from("bias_alerts")
+            .select("*")
+            .order("created_at", { ascending: false });
+          if (error || !data) return { data, error };
+          const enriched = await enrichWithProfiles(data, "candidate_id");
+          return { data: enriched as any, error: null };
+        }
+      );
+    }
   );
 }
 
@@ -493,12 +670,27 @@ export async function dismissBiasAlert(id: string) {
 
 // ── AI Evaluations ──
 export function useAIEvaluations() {
-  return useSupabaseQuery(() =>
-    supabase
-      .from("ai_evaluations")
-      .select("*, profiles!candidate_id(name)")
-      .order("created_at", { ascending: false })
-      .limit(50)
+  return useSupabaseQuery(
+    async () => {
+      return queryWithFallback(
+        () =>
+          supabase
+            .from("ai_evaluations")
+            .select("*, profiles!candidate_id(name)")
+            .order("created_at", { ascending: false })
+            .limit(50),
+        async () => {
+          const { data, error } = await supabase
+            .from("ai_evaluations")
+            .select("*")
+            .order("created_at", { ascending: false })
+            .limit(50);
+          if (error || !data) return { data, error };
+          const enriched = await enrichWithProfiles(data, "candidate_id");
+          return { data: enriched as any, error: null };
+        }
+      );
+    }
   );
 }
 
