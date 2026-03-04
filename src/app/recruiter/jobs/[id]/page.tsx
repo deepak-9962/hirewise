@@ -23,19 +23,27 @@ const statusColors: Record<string, string> = {
 const appStatusColors: Record<string, string> = {
   applied: "bg-blue-100 text-blue-700",
   under_review: "bg-amber-100 text-amber-700",
+  shortlisted: "bg-cyan-100 text-cyan-700",
   test_enabled: "bg-green-100 text-green-700",
   test_completed: "bg-purple-100 text-purple-700",
+  interview_scheduled: "bg-orange-100 text-orange-700",
+  offered: "bg-teal-100 text-teal-700",
   rejected: "bg-red-100 text-red-600",
   hired: "bg-emerald-100 text-emerald-700",
+  withdrawn: "bg-slate-100 text-slate-500",
 };
 
 const appStatusLabels: Record<string, string> = {
   applied: "Applied",
   under_review: "Under Review",
+  shortlisted: "Shortlisted",
   test_enabled: "Test Enabled",
   test_completed: "Test Done",
+  interview_scheduled: "Interview",
+  offered: "Offered",
   rejected: "Rejected",
   hired: "Hired",
+  withdrawn: "Withdrawn",
 };
 
 type Tab = "overview" | "questions" | "applications";

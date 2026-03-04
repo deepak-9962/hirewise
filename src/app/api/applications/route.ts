@@ -10,22 +10,60 @@ export async function GET(req: NextRequest) {
   const admin = getSupabaseAdmin();
 
   if (jobId) {
-    const { data, error } = await admin
+    // Try FK join first, fall back to manual join if FK doesn't exist
+    let { data, error } = await admin
       .from("applications")
       .select("*, profiles!candidate_id(name, email)")
       .eq("job_id", jobId)
       .order("applied_at", { ascending: false });
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    if (error) {
+      // Fallback: fetch without FK join, then enrich manually
+      const { data: apps, error: appsError } = await admin
+        .from("applications")
+        .select("*")
+        .eq("job_id", jobId)
+        .order("applied_at", { ascending: false });
+      if (appsError) return NextResponse.json({ error: appsError.message }, { status: 500 });
+
+      // Fetch profiles for all candidate_ids
+      const candidateIds = [...new Set((apps ?? []).map((a: any) => a.candidate_id).filter(Boolean))];
+      let profileMap = new Map<string, any>();
+      if (candidateIds.length > 0) {
+        const { data: profiles } = await admin.from("profiles").select("id, name, email").in("id", candidateIds);
+        profileMap = new Map((profiles ?? []).map((p: any) => [p.id, p]));
+      }
+      data = (apps ?? []).map((a: any) => ({ ...a, profiles: profileMap.get(a.candidate_id) ?? null }));
+    }
+
     return NextResponse.json(data);
   }
 
   if (candidateId) {
-    const { data, error } = await admin
+    let { data, error } = await admin
       .from("applications")
       .select("*, jobs(id, title, department, type, status, target_skills)")
       .eq("candidate_id", candidateId)
       .order("applied_at", { ascending: false });
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    if (error) {
+      // Fallback: fetch without FK join, then enrich manually
+      const { data: apps, error: appsError } = await admin
+        .from("applications")
+        .select("*")
+        .eq("candidate_id", candidateId)
+        .order("applied_at", { ascending: false });
+      if (appsError) return NextResponse.json({ error: appsError.message }, { status: 500 });
+
+      const jobIds = [...new Set((apps ?? []).map((a: any) => a.job_id).filter(Boolean))];
+      let jobMap = new Map<string, any>();
+      if (jobIds.length > 0) {
+        const { data: jobs } = await admin.from("jobs").select("id, title, department, type, status, target_skills").in("id", jobIds);
+        jobMap = new Map((jobs ?? []).map((j: any) => [j.id, j]));
+      }
+      data = (apps ?? []).map((a: any) => ({ ...a, jobs: jobMap.get(a.job_id) ?? null }));
+    }
+
     return NextResponse.json(data);
   }
 

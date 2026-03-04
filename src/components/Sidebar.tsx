@@ -25,6 +25,7 @@ const navItems: Record<string, NavItem[]> = {
   ],
   recruiter: [
     { label: "Dashboard", href: "/recruiter/dashboard", icon: "dashboard" },
+    { label: "ATS Pipeline", href: "/recruiter/ats", icon: "view_kanban" },
     { label: "Jobs", href: "/recruiter/jobs", icon: "work" },
     { label: "Question Bank", href: "/recruiter/questions", icon: "quiz" },
     { label: "Monitoring", href: "/recruiter/monitoring", icon: "monitor_heart" },

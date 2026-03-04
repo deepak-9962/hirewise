@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, use } from "react";
 import dynamic from "next/dynamic";
 import { useAuth } from "@/context/AuthContext";
+import { useProctoring } from "@/hooks/useProctoring";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
 
@@ -101,6 +102,14 @@ export default function InterviewSessionPage({ params }: { params: Promise<{ id:
   const [runningCode, setRunningCode] = useState(false);
   const [generatingReport, setGeneratingReport] = useState(false);
   const [finalReport, setFinalReport] = useState<Record<string, unknown> | null>(null);
+  const [interviewStarted, setInterviewStarted] = useState(false);
+
+  // Proctoring
+  const proctoring = useProctoring({
+    enabled: interviewStarted && !showComplete,
+    maxTabSwitches: 3,
+    maxViolations: 5,
+  });
 
   // Load real questions from DB (fall back to mock if not available)
   useEffect(() => {
@@ -150,6 +159,14 @@ export default function InterviewSessionPage({ params }: { params: Promise<{ id:
   useEffect(() => {
     if (questions[currentIndex]) setTimeLeft(questions[currentIndex].timeLimit);
   }, [currentIndex, questions]);
+
+  // Exit fullscreen when interview completes
+  useEffect(() => {
+    if (showComplete || proctoring.isTerminated) {
+      proctoring.exitFullscreen();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showComplete, proctoring.isTerminated]);
 
   const handleSubmit = useCallback(async () => {
     setIsSubmitted((prev) => ({ ...prev, [currentQ.id]: true }));
@@ -218,6 +235,13 @@ export default function InterviewSessionPage({ params }: { params: Promise<{ id:
                 answers,
                 evaluations,
                 finalReport: data.report,
+                proctoring: {
+                  violations: proctoring.violations,
+                  tabSwitchCount: proctoring.tabSwitchCount,
+                  fullscreenExitCount: proctoring.fullscreenExitCount,
+                  copyPasteCount: proctoring.copyPasteCount,
+                  totalViolations: proctoring.violations.length,
+                },
               }),
             });
           } catch (saveErr) {
@@ -290,6 +314,120 @@ export default function InterviewSessionPage({ params }: { params: Promise<{ id:
     return (
       <div className="min-h-screen flex items-center justify-center">
         <p className="text-slate-500">No questions found for this interview.</p>
+      </div>
+    );
+  }
+
+  // ── Start Interview Gate ─────────────────────────────────
+  if (!interviewStarted) {
+    return (
+      <div className="min-h-screen bg-background-light dark:bg-background-dark flex items-center justify-center p-4">
+        <div className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-200 dark:border-slate-700 p-8 sm:p-12 text-center max-w-lg shadow-xl w-full">
+          <div className="size-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-6">
+            <span className="material-symbols-outlined text-primary text-4xl">shield</span>
+          </div>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white mb-2">{jobTitle}</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
+            {totalQuestions} Questions &middot; Proctored Session
+          </p>
+
+          <div className="text-left bg-slate-50 dark:bg-slate-700/30 rounded-xl p-5 mb-6 space-y-3">
+            <h3 className="font-bold text-sm text-slate-900 dark:text-white flex items-center gap-2">
+              <span className="material-symbols-outlined text-primary text-lg">gavel</span> Interview Rules
+            </h3>
+            <ul className="space-y-2 text-sm text-slate-600 dark:text-slate-300">
+              <li className="flex items-start gap-2">
+                <span className="material-symbols-outlined text-red-500 text-sm mt-0.5">fullscreen</span>
+                The interview runs in <strong>fullscreen mode</strong>. Exiting fullscreen is a violation.
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="material-symbols-outlined text-red-500 text-sm mt-0.5">tab_unselected</span>
+                <strong>Tab switching</strong> and window switching are monitored and recorded.
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="material-symbols-outlined text-red-500 text-sm mt-0.5">content_paste_off</span>
+                <strong>Copy, paste, and cut</strong> are disabled during the test.
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="material-symbols-outlined text-red-500 text-sm mt-0.5">block</span>
+                <strong>Right-click</strong> and developer tools are blocked.
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="material-symbols-outlined text-red-500 text-sm mt-0.5">warning</span>
+                <strong>3 tab switches</strong> or <strong>5 total violations</strong> will auto-terminate the interview.
+              </li>
+            </ul>
+          </div>
+
+          <button
+            onClick={async () => {
+              await proctoring.requestFullscreen();
+              setInterviewStarted(true);
+            }}
+            className="bg-primary text-white text-sm font-bold px-8 py-3 rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-primary/20 w-full flex items-center justify-center gap-2"
+          >
+            <span className="material-symbols-outlined text-lg">play_arrow</span>
+            Start Interview
+          </button>
+
+          <p className="text-xs text-slate-400 mt-4">
+            By starting, you agree to the proctored testing conditions above.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Terminated Screen ────────────────────────────────────
+  if (proctoring.isTerminated) {
+    return (
+      <div className="min-h-screen bg-background-light dark:bg-background-dark flex items-center justify-center p-4">
+        <div className="bg-white dark:bg-slate-800 rounded-2xl border border-red-200 dark:border-red-800 p-8 sm:p-12 text-center max-w-lg shadow-xl w-full">
+          <div className="size-20 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-6">
+            <span className="material-symbols-outlined text-red-600 text-4xl">gpp_bad</span>
+          </div>
+          <h1 className="text-2xl font-bold text-red-600 mb-2">Interview Terminated</h1>
+          <p className="text-sm text-slate-500 dark:text-slate-400 mb-6">
+            Your interview has been terminated due to multiple integrity violations.
+          </p>
+
+          <div className="bg-red-50 dark:bg-red-900/10 rounded-xl p-5 text-left mb-6 border border-red-200 dark:border-red-800">
+            <h3 className="font-bold text-sm text-red-700 dark:text-red-400 mb-3">Violation Summary</h3>
+            <div className="grid grid-cols-3 gap-3 mb-4">
+              <div className="text-center">
+                <p className="text-2xl font-black text-red-600">{proctoring.tabSwitchCount}</p>
+                <p className="text-xs text-slate-500">Tab Switches</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-black text-red-600">{proctoring.fullscreenExitCount}</p>
+                <p className="text-xs text-slate-500">Fullscreen Exits</p>
+              </div>
+              <div className="text-center">
+                <p className="text-2xl font-black text-red-600">{proctoring.copyPasteCount}</p>
+                <p className="text-xs text-slate-500">Copy/Paste</p>
+              </div>
+            </div>
+            <div className="space-y-1.5 max-h-40 overflow-y-auto">
+              {proctoring.violations.map((v, i) => (
+                <div key={i} className="text-xs text-red-600 dark:text-red-300 flex items-start gap-2">
+                  <span className="text-red-400 mt-0.5">•</span>
+                  <span>{v.detail}</span>
+                  <span className="text-red-300 ml-auto whitespace-nowrap">
+                    {new Date(v.timestamp).toLocaleTimeString()}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <a
+            href="/candidate/dashboard"
+            onClick={() => proctoring.exitFullscreen()}
+            className="bg-slate-900 text-white text-sm font-bold px-8 py-3 rounded-xl hover:bg-slate-800 transition-all inline-block"
+          >
+            Back to Dashboard
+          </a>
+        </div>
       </div>
     );
   }
@@ -415,6 +553,24 @@ export default function InterviewSessionPage({ params }: { params: Promise<{ id:
 
   return (
     <div className="min-h-screen bg-background-light dark:bg-background-dark flex flex-col">
+      {/* Proctoring Warning Overlay */}
+      {proctoring.warningMessage && (
+        <div className="fixed top-0 left-0 right-0 z-50 animate-slide-down">
+          <div className="bg-red-600 text-white px-4 py-3 flex items-center justify-between shadow-lg">
+            <div className="flex items-center gap-3">
+              <span className="material-symbols-outlined text-xl animate-pulse">warning</span>
+              <span className="text-sm font-semibold">{proctoring.warningMessage}</span>
+            </div>
+            <button
+              onClick={proctoring.dismissWarning}
+              className="text-white/80 hover:text-white transition-colors"
+            >
+              <span className="material-symbols-outlined text-lg">close</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Top Bar */}
       <div className="sticky top-0 z-40 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 px-4 lg:px-6">
         <div className="flex items-center justify-between h-14">
@@ -446,6 +602,25 @@ export default function InterviewSessionPage({ params }: { params: Promise<{ id:
             {/* Pause */}
             {isPaused && (
               <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded">PAUSED</span>
+            )}
+
+            {/* Proctoring Violations Counter */}
+            {proctoring.violations.length > 0 && (
+              <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400">
+                <span className="material-symbols-outlined text-sm">shield</span>
+                <span className="text-xs font-bold">{proctoring.violations.length}/5</span>
+              </div>
+            )}
+
+            {/* Fullscreen indicator */}
+            {!proctoring.isFullscreen && interviewStarted && (
+              <button
+                onClick={proctoring.requestFullscreen}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-amber-600 text-xs font-bold hover:bg-amber-100 transition-colors"
+              >
+                <span className="material-symbols-outlined text-sm">fullscreen</span>
+                Re-enter Fullscreen
+              </button>
             )}
           </div>
         </div>
@@ -561,7 +736,7 @@ export default function InterviewSessionPage({ params }: { params: Promise<{ id:
               </div>
               {evaluating[currentQ.id] ? (
                 <div className="p-6 text-center">
-                  <p className="text-sm text-slate-500">Gemini is analyzing your response...</p>
+                  <p className="text-sm text-slate-500">AI is analyzing your response...</p>
                   <div className="flex gap-1 justify-center mt-3">
                     <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "0ms" }}></div>
                     <div className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: "150ms" }}></div>

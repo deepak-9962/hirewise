@@ -16,6 +16,7 @@ export async function POST(request: NextRequest) {
       answers,
       evaluations,
       finalReport,
+      proctoring,
     } = body;
 
     if (!candidateId) {
@@ -44,6 +45,7 @@ export async function POST(request: NextRequest) {
             completed_at: new Date().toISOString(),
             score: overallScore,
             total_questions: questions?.length ?? 0,
+            proctoring_data: proctoring ?? null,
           })
           .eq("id", interviewId);
 
@@ -77,6 +79,7 @@ export async function POST(request: NextRequest) {
           scheduled_at: new Date().toISOString(),
           score: overallScore,
           total_questions: questions?.length ?? 0,
+          proctoring_data: proctoring ?? null,
         })
         .select()
         .single();
