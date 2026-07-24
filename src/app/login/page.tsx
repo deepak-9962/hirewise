@@ -22,18 +22,71 @@ function LoginForm() {
     setLoading(true);
 
     try {
-      const { data, error: authError } = await supabase.auth.signInWithPassword({
-        email,
+      const cleanEmail = email.trim().toLowerCase();
+
+      // If logging in with a demo account, ensure backend provisioner syncs it
+      if (cleanEmail.endsWith("@hirewise.demo")) {
+        const role = cleanEmail.startsWith("recruiter")
+          ? "recruiter"
+          : cleanEmail.startsWith("admin")
+          ? "admin"
+          : "candidate";
+
+        await fetch("/api/auth/demo-login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ role }),
+        }).catch(() => {});
+      }
+
+      let { data, error: authError } = await supabase.auth.signInWithPassword({
+        email: cleanEmail,
         password,
       });
 
-      if (authError) {
-        setError(authError.message);
+      // If sign in fails on a demo account, attempt auto signup fallback
+      if (authError && cleanEmail.endsWith("@hirewise.demo")) {
+        const role = cleanEmail.startsWith("recruiter")
+          ? "recruiter"
+          : cleanEmail.startsWith("admin")
+          ? "admin"
+          : "candidate";
+
+        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+          email: cleanEmail,
+          password,
+          options: {
+            data: {
+              name: role === "recruiter" ? "Sarah Jenkins (Recruiter)" : role === "admin" ? "System Admin" : "Alex Rivera (Candidate)",
+              role: role,
+            },
+          },
+        });
+
+        if (signUpError) {
+          setError(signUpError.message);
+          setLoading(false);
+          return;
+        }
+
+        data = signUpData;
+
+        if (data?.user) {
+          await supabase
+            .from("profiles")
+            .upsert({ id: data.user.id, role: role, email: cleanEmail });
+        }
+      } else if (authError) {
+        if (authError.message.includes("Invalid login credentials")) {
+          setError("Invalid login credentials. Please check your email and password, or click 'Create one' below to sign up.");
+        } else {
+          setError(authError.message);
+        }
         setLoading(false);
         return;
       }
 
-      if (data.user) {
+      if (data?.user) {
         if (redirectTo) {
           router.push(redirectTo);
         } else {

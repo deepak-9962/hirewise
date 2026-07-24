@@ -19,10 +19,15 @@ import { scoreResume } from "@/lib/gemini";
 
 // pdf-parse v1 — simple CJS function(buffer) → Promise<{text}>
 async function extractPdfText(buffer: Buffer): Promise<string> {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const pdfParse = require("pdf-parse");
-  const data = await pdfParse(buffer);
-  return data.text ?? "";
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const pdfParse = require("pdf-parse");
+    const data = await pdfParse(buffer);
+    return data.text ?? "";
+  } catch (err) {
+    console.warn("[resume-score] pdf-parse fallback triggered:", err);
+    return buffer.toString("utf-8");
+  }
 }
 
 // ── helpers ────────────────────────────────────────────────
