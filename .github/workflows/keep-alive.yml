@@ -1,0 +1,36 @@
+name: Supabase Keep-Alive Ping
+
+on:
+  schedule:
+    # Runs every 2 days at 00:00 UTC (prevents Supabase 7-day inactivity pause)
+    - cron: '0 0 */2 * *'
+  workflow_dispatch: # Allows manual trigger from GitHub Actions tab
+
+jobs:
+  ping-supabase:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase Database
+        env:
+          SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+        run: |
+          if [ -n "$SUPABASE_URL" ] && [ -n "$SUPABASE_ANON_KEY" ]; then
+            echo "Pinging Supabase REST API..."
+            curl -s -f -X GET "$SUPABASE_URL/rest/v1/jobs?select=id&limit=1" \
+              -H "apikey: $SUPABASE_ANON_KEY" \
+              -H "Authorization: Bearer $SUPABASE_ANON_KEY"
+            echo -e "\nSupabase REST API ping successful!"
+          else
+            echo "Secrets NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY not set in GitHub secrets."
+          fi
+
+      - name: Ping Application Keep-Alive Endpoint (Optional)
+        env:
+          APP_URL: ${{ secrets.PRODUCTION_APP_URL }}
+        run: |
+          if [ -n "$APP_URL" ]; then
+            echo "Pinging production app keep-alive route..."
+            curl -s -f "$APP_URL/api/keep-alive"
+            echo -e "\nApplication keep-alive ping successful!"
+          fi
