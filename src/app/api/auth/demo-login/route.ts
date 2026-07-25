@@ -17,41 +17,36 @@ export async function POST(req: NextRequest) {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-    // 1. If service role key is available, ensure user exists with auto-confirmed email and reset password
+    // 1. If service role key is available, ensure user exists with auto-confirmed email
     if (supabaseServiceKey && supabaseUrl) {
       const admin = createClient(supabaseUrl, supabaseServiceKey, {
         auth: { autoRefreshToken: false, persistSession: false },
       });
 
-      // Check if user already exists
-      const { data: usersData } = await admin.auth.admin.listUsers();
-      const existingUser = usersData?.users?.find((u) => u.email === account.email);
+      // Try creating user directly first (fastest path)
+      const { data: newUser, error: createErr } = await admin.auth.admin.createUser({
+        email: account.email,
+        password: password,
+        email_confirm: true,
+        user_metadata: { name: account.name, role: role },
+      });
 
-      let userId = existingUser?.id;
+      let userId = newUser?.user?.id;
 
-      if (existingUser) {
-        // Reset password & confirm email
-        await admin.auth.admin.updateUserById(existingUser.id, {
-          password: password,
-          email_confirm: true,
-          user_metadata: { name: account.name, role: role },
-        });
-      } else {
-        // Create user with confirmed email
-        const { data: newUser, error: createErr } = await admin.auth.admin.createUser({
-          email: account.email,
-          password: password,
-          email_confirm: true,
-          user_metadata: { name: account.name, role: role },
-        });
-        if (createErr) {
-          console.error("Admin user creation failed:", createErr);
-        } else if (newUser.user) {
-          userId = newUser.user.id;
+      if (createErr) {
+        // If user exists, find profile or update user password
+        const { data: profile } = await admin.from("profiles").select("id").eq("email", account.email).maybeSingle();
+        if (profile?.id) {
+          userId = profile.id;
+          await admin.auth.admin.updateUserById(profile.id, {
+            password: password,
+            email_confirm: true,
+            user_metadata: { name: account.name, role: role },
+          });
         }
       }
 
-      // Upsert profile
+      // Ensure profile exists
       if (userId) {
         await admin.from("profiles").upsert({
           id: userId,

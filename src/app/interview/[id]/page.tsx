@@ -1,11 +1,93 @@
 "use client";
 
-import { useState, useEffect, useCallback, use } from "react";
+import { useState, useEffect, useCallback, useRef, use } from "react";
 import dynamic from "next/dynamic";
 import { useAuth } from "@/context/AuthContext";
 import { useProctoring } from "@/hooks/useProctoring";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
+
+function WebRTCCameraPreview({
+  stream,
+  error,
+  isMinimized,
+  onToggleMinimize,
+}: {
+  stream: MediaStream | null;
+  error: string | null;
+  isMinimized: boolean;
+  onToggleMinimize: () => void;
+}) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    if (videoRef.current && stream) {
+      videoRef.current.srcObject = stream;
+    }
+  }, [stream]);
+
+  if (isMinimized) {
+    return (
+      <button
+        onClick={onToggleMinimize}
+        className="fixed bottom-4 right-4 z-50 bg-slate-900 text-white p-3 rounded-full shadow-2xl flex items-center gap-2 border border-slate-700 hover:bg-slate-800 transition-all"
+        title="Expand Camera Preview"
+      >
+        <span className="relative flex size-3">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+          <span className="relative inline-flex rounded-full size-3 bg-red-500"></span>
+        </span>
+        <span className="material-symbols-outlined text-lg">videocam</span>
+      </button>
+    );
+  }
+
+  return (
+    <div className="fixed bottom-4 right-4 z-50 w-56 sm:w-64 bg-slate-900 rounded-xl overflow-hidden shadow-2xl border border-slate-700 dark:border-slate-600 transition-all">
+      <div className="bg-slate-950/80 px-3 py-1.5 flex items-center justify-between border-b border-slate-800 text-xs">
+        <div className="flex items-center gap-2">
+          <span className="relative flex size-2.5">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+            <span className="relative inline-flex rounded-full size-2.5 bg-red-500"></span>
+          </span>
+          <span className="font-bold text-slate-200 tracking-wider text-[11px] uppercase">Live Proctoring</span>
+        </div>
+        <button
+          onClick={onToggleMinimize}
+          className="text-slate-400 hover:text-white transition-colors"
+          title="Minimize camera preview"
+        >
+          <span className="material-symbols-outlined text-sm">remove</span>
+        </button>
+      </div>
+
+      <div className="relative aspect-video bg-slate-950 flex items-center justify-center overflow-hidden">
+        {stream ? (
+          <video
+            ref={videoRef}
+            autoPlay
+            playsInline
+            muted
+            className="w-full h-full object-cover scale-x-[-1]"
+          />
+        ) : error ? (
+          <div className="p-3 text-center text-red-400 text-xs flex flex-col items-center gap-1">
+            <span className="material-symbols-outlined text-xl">videocam_off</span>
+            <span className="line-clamp-2">{error}</span>
+          </div>
+        ) : (
+          <div className="p-3 text-center text-slate-400 text-xs flex flex-col items-center gap-2">
+            <span className="animate-spin material-symbols-outlined text-xl text-primary">progress_activity</span>
+            <span>Starting WebRTC stream...</span>
+          </div>
+        )}
+        <div className="absolute bottom-1.5 left-2 px-1.5 py-0.5 rounded bg-black/60 backdrop-blur-sm text-[10px] font-mono text-white flex items-center gap-1">
+          <span className="material-symbols-outlined text-[10px] text-green-400">videocam</span> WebRTC Active
+        </div>
+      </div>
+    </div>
+  );
+}
 
 interface Question {
   id: number;
@@ -103,6 +185,7 @@ export default function InterviewSessionPage({ params }: { params: Promise<{ id:
   const [generatingReport, setGeneratingReport] = useState(false);
   const [finalReport, setFinalReport] = useState<Record<string, unknown> | null>(null);
   const [interviewStarted, setInterviewStarted] = useState(false);
+  const [isCameraMinimized, setIsCameraMinimized] = useState(false);
 
   // Proctoring
   const proctoring = useProctoring({
@@ -604,6 +687,24 @@ export default function InterviewSessionPage({ params }: { params: Promise<{ id:
               <span className="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded">PAUSED</span>
             )}
 
+            {/* Live Focus Status Indicator */}
+            <div className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold ${
+              proctoring.isFocused
+                ? "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800"
+                : "bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800 animate-pulse"
+            }`}>
+              <span className={`size-2 rounded-full ${proctoring.isFocused ? "bg-emerald-500" : "bg-amber-500 animate-ping"}`} />
+              <span className="hidden sm:inline">{proctoring.isFocused ? "Tab Active" : "Unfocused"}</span>
+            </div>
+
+            {/* Paste Violation Counter */}
+            {proctoring.copyPasteCount > 0 && (
+              <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-orange-50 dark:bg-orange-900/20 text-orange-600 dark:text-orange-400 text-xs font-bold" title="Copy/Paste Attempts Recorded">
+                <span className="material-symbols-outlined text-sm">content_paste_off</span>
+                <span>{proctoring.copyPasteCount}</span>
+              </div>
+            )}
+
             {/* Proctoring Violations Counter */}
             {proctoring.violations.length > 0 && (
               <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400">
@@ -860,6 +961,16 @@ export default function InterviewSessionPage({ params }: { params: Promise<{ id:
           </div>
         </div>
       </div>
+
+      {/* WebRTC Camera Preview Floating Feed */}
+      {interviewStarted && !showComplete && !proctoring.isTerminated && (
+        <WebRTCCameraPreview
+          stream={proctoring.cameraStream}
+          error={proctoring.cameraError}
+          isMinimized={isCameraMinimized}
+          onToggleMinimize={() => setIsCameraMinimized((prev) => !prev)}
+        />
+      )}
     </div>
   );
 }

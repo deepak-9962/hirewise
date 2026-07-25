@@ -46,13 +46,13 @@ async function enrichWithJobs<T extends Record<string, any>>(
   return items.map((i) => ({ ...i, jobs: map.get(i[idField]) ?? null }));
 }
 
-// ── Generic fetch helper ──
+// ── Generic fetch helper (with optional polling) ──
 export function useSupabaseQuery<T>(
   queryFn: () => PromiseLike<{ data: T | null; error: unknown }>,
   deps: unknown[] = [],
-  options: { enabled?: boolean } = {}
+  options: { enabled?: boolean; pollInterval?: number } = {}
 ) {
-  const { enabled = true } = options;
+  const { enabled = true, pollInterval } = options;
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -83,7 +83,66 @@ export function useSupabaseQuery<T>(
     refetch();
   }, [refetch]);
 
+  // Polling support
+  useEffect(() => {
+    if (!pollInterval || !enabled) return;
+    const id = setInterval(() => {
+      refetch();
+    }, pollInterval);
+    return () => clearInterval(id);
+  }, [pollInterval, enabled, refetch]);
+
   return { data, loading, error, refetch };
+}
+
+// ── Realtime-enabled fetch helper ──
+// Subscribes to Supabase Realtime postgres_changes and auto-refetches on any matching event.
+let _realtimeChannelCounter = 0;
+export function useRealtimeQuery<T>(
+  queryFn: () => PromiseLike<{ data: T | null; error: unknown }>,
+  realtimeConfig: {
+    table: string;
+    event?: "INSERT" | "UPDATE" | "DELETE" | "*";
+    filter?: string;
+  },
+  deps: unknown[] = [],
+  options: { enabled?: boolean } = {}
+) {
+  const { enabled = true } = options;
+  const base = useSupabaseQuery(queryFn, deps, options);
+
+  useEffect(() => {
+    if (!enabled) return;
+
+    const channelName = `realtime-${realtimeConfig.table}-${++_realtimeChannelCounter}`;
+    const channelFilter: Record<string, unknown> = {
+      event: realtimeConfig.event ?? "*",
+      schema: "public",
+      table: realtimeConfig.table,
+    };
+    if (realtimeConfig.filter) {
+      channelFilter.filter = realtimeConfig.filter;
+    }
+
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        "postgres_changes" as any,
+        channelFilter as any,
+        () => {
+          // Auto-refetch when any matching change occurs
+          base.refetch();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, realtimeConfig.table, realtimeConfig.event, realtimeConfig.filter, base.refetch]);
+
+  return base;
 }
 
 // ── Profiles ──
@@ -101,16 +160,20 @@ export function useAllProfiles(roleFilter?: string) {
     let q = supabase.from("profiles").select("*").order("created_at", { ascending: false });
     if (roleFilter && roleFilter !== "all") q = q.eq("role", roleFilter);
     return q;
-  }, [roleFilter]);
+  }, [roleFilter], { pollInterval: 60_000 });
 }
 
 // ── Jobs ──
 export function useJobs(status?: string) {
-  return useSupabaseQuery(() => {
-    let q = supabase.from("jobs").select("*").order("created_at", { ascending: false });
-    if (status && status !== "all") q = q.eq("status", status);
-    return q;
-  }, [status]);
+  return useRealtimeQuery(
+    () => {
+      let q = supabase.from("jobs").select("*").order("created_at", { ascending: false });
+      if (status && status !== "all") q = q.eq("status", status);
+      return q;
+    },
+    { table: "jobs" },
+    [status]
+  );
 }
 
 export function useJobById(id?: string) {
@@ -122,7 +185,7 @@ export function useJobById(id?: string) {
 }
 
 export function useInterviewsByJob(jobId?: string) {
-  return useSupabaseQuery(
+  return useRealtimeQuery(
     async () => {
       return queryWithFallback(
         () =>
@@ -143,6 +206,7 @@ export function useInterviewsByJob(jobId?: string) {
         }
       );
     },
+    { table: "interviews", filter: jobId ? `job_id=eq.${jobId}` : undefined },
     [jobId],
     { enabled: !!jobId }
   );
@@ -184,7 +248,7 @@ export async function deleteJob(id: string) {
 
 // ── Applications ──
 export function useApplications(jobId?: string) {
-  return useSupabaseQuery(
+  return useRealtimeQuery(
     async () => {
       return queryWithFallback(
         () =>
@@ -205,13 +269,14 @@ export function useApplications(jobId?: string) {
         }
       );
     },
+    { table: "applications", filter: jobId ? `job_id=eq.${jobId}` : undefined },
     [jobId],
     { enabled: !!jobId }
   );
 }
 
 export function useCandidateApplications(userId?: string) {
-  return useSupabaseQuery(
+  return useRealtimeQuery(
     async () => {
       return queryWithFallback(
         () =>
@@ -232,6 +297,7 @@ export function useCandidateApplications(userId?: string) {
         }
       );
     },
+    { table: "applications", filter: userId ? `candidate_id=eq.${userId}` : undefined },
     [userId],
     { enabled: !!userId }
   );
@@ -414,7 +480,7 @@ export async function deleteQuestion(id: string) {
 
 // ── Interviews ──
 export function useCandidateInterviews(candidateId?: string) {
-  return useSupabaseQuery(
+  return useRealtimeQuery(
     async () => {
       return queryWithFallback(
         () =>
@@ -435,13 +501,14 @@ export function useCandidateInterviews(candidateId?: string) {
         }
       );
     },
+    { table: "interviews", filter: candidateId ? `candidate_id=eq.${candidateId}` : undefined },
     [candidateId],
     { enabled: !!candidateId }
   );
 }
 
 export function useAllInterviews(status?: string) {
-  return useSupabaseQuery(
+  return useRealtimeQuery(
     async () => {
       return queryWithFallback(
         () => {
@@ -466,6 +533,7 @@ export function useAllInterviews(status?: string) {
         }
       );
     },
+    { table: "interviews" },
     [status]
   );
 }
@@ -515,7 +583,7 @@ export async function upsertResponse(response: {
 
 // ── Reports ──
 export function useCandidateReports(candidateId?: string) {
-  return useSupabaseQuery(
+  return useRealtimeQuery(
     async () => {
       return queryWithFallback(
         () =>
@@ -534,13 +602,14 @@ export function useCandidateReports(candidateId?: string) {
         }
       );
     },
+    { table: "reports", filter: candidateId ? `candidate_id=eq.${candidateId}` : undefined },
     [candidateId],
     { enabled: !!candidateId }
   );
 }
 
 export function useAllReports() {
-  return useSupabaseQuery(
+  return useRealtimeQuery(
     async () => {
       return queryWithFallback(
         () =>
@@ -558,7 +627,8 @@ export function useAllReports() {
           return { data: enriched as any, error: null };
         }
       );
-    }
+    },
+    { table: "reports" }
   );
 }
 
@@ -568,7 +638,7 @@ export async function updateReport(id: string, updates: Record<string, unknown>)
 
 // ── Bias Alerts ──
 export function useBiasAlerts() {
-  return useSupabaseQuery(
+  return useRealtimeQuery(
     async () => {
       return queryWithFallback(
         () =>
@@ -586,7 +656,8 @@ export function useBiasAlerts() {
           return { data: enriched as any, error: null };
         }
       );
-    }
+    },
+    { table: "bias_alerts" }
   );
 }
 
@@ -616,18 +687,23 @@ export function useAIEvaluations() {
           return { data: enriched as any, error: null };
         }
       );
-    }
+    },
+    [],
+    { pollInterval: 60_000 }
   );
 }
 
 // ── System Logs ──
 export function useSystemLogs() {
-  return useSupabaseQuery(() =>
-    supabase
-      .from("system_logs")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(50)
+  return useSupabaseQuery(
+    () =>
+      supabase
+        .from("system_logs")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(50),
+    [],
+    { pollInterval: 30_000 }
   );
 }
 
@@ -636,42 +712,50 @@ export function useDashboardStats(role: string) {
   const [stats, setStats] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchStats = async () => {
-      setLoading(true);
-      const results: Record<string, number> = {};
+  const fetchStats = useCallback(async () => {
+    setLoading(true);
+    const results: Record<string, number> = {};
 
-      if (role === "admin") {
-        const [users, interviews, jobs, alerts] = await Promise.all([
-          supabase.from("profiles").select("id", { count: "exact", head: true }),
-          supabase.from("interviews").select("id", { count: "exact", head: true }),
-          supabase.from("jobs").select("id", { count: "exact", head: true }),
-          supabase.from("bias_alerts").select("id", { count: "exact", head: true }).eq("dismissed", false),
-        ]);
-        results.totalUsers = users.count ?? 0;
-        results.totalInterviews = interviews.count ?? 0;
-        results.totalJobs = jobs.count ?? 0;
-        results.activeBiasAlerts = alerts.count ?? 0;
-      }
+    if (role === "admin") {
+      const [users, interviews, jobs, alerts] = await Promise.all([
+        supabase.from("profiles").select("id", { count: "exact", head: true }),
+        supabase.from("interviews").select("id", { count: "exact", head: true }),
+        supabase.from("jobs").select("id", { count: "exact", head: true }),
+        supabase.from("bias_alerts").select("id", { count: "exact", head: true }).eq("dismissed", false),
+      ]);
+      results.totalUsers = users.count ?? 0;
+      results.totalInterviews = interviews.count ?? 0;
+      results.totalJobs = jobs.count ?? 0;
+      results.activeBiasAlerts = alerts.count ?? 0;
+    }
 
-      if (role === "recruiter") {
-        const [jobs, interviews, completed, candidates] = await Promise.all([
-          supabase.from("jobs").select("id", { count: "exact", head: true }).eq("status", "active"),
-          supabase.from("interviews").select("id", { count: "exact", head: true }),
-          supabase.from("interviews").select("id", { count: "exact", head: true }).eq("status", "completed"),
-          supabase.from("profiles").select("id", { count: "exact", head: true }).eq("role", "candidate"),
-        ]);
-        results.activeJobs = jobs.count ?? 0;
-        results.totalInterviews = interviews.count ?? 0;
-        results.completed = completed.count ?? 0;
-        results.totalCandidates = candidates.count ?? 0;
-      }
+    if (role === "recruiter") {
+      const [jobs, interviews, completed, candidates] = await Promise.all([
+        supabase.from("jobs").select("id", { count: "exact", head: true }).eq("status", "active"),
+        supabase.from("interviews").select("id", { count: "exact", head: true }),
+        supabase.from("interviews").select("id", { count: "exact", head: true }).eq("status", "completed"),
+        supabase.from("profiles").select("id", { count: "exact", head: true }).eq("role", "candidate"),
+      ]);
+      results.activeJobs = jobs.count ?? 0;
+      results.totalInterviews = interviews.count ?? 0;
+      results.completed = completed.count ?? 0;
+      results.totalCandidates = candidates.count ?? 0;
+    }
 
-      setStats(results);
-      setLoading(false);
-    };
-    fetchStats();
+    setStats(results);
+    setLoading(false);
   }, [role]);
+
+  // Initial fetch
+  useEffect(() => {
+    fetchStats();
+  }, [fetchStats]);
+
+  // Poll every 30 seconds
+  useEffect(() => {
+    const id = setInterval(fetchStats, 30_000);
+    return () => clearInterval(id);
+  }, [fetchStats]);
 
   return { stats, loading };
 }

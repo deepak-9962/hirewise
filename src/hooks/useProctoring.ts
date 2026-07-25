@@ -16,12 +16,16 @@ export interface ProctoringViolation {
 
 export interface ProctoringState {
   isFullscreen: boolean;
+  isFocused: boolean;
   tabSwitchCount: number;
   fullscreenExitCount: number;
   copyPasteCount: number;
   violations: ProctoringViolation[];
   warningMessage: string | null;
   isTerminated: boolean;
+  cameraStream: MediaStream | null;
+  cameraError: string | null;
+  hasCameraPermission: boolean;
 }
 
 interface UseProctoringOptions {
@@ -29,6 +33,7 @@ interface UseProctoringOptions {
   maxTabSwitches?: number;
   maxViolations?: number;
   showWarningDurationMs?: number;
+  enableCamera?: boolean;
 }
 
 export function useProctoring(options: UseProctoringOptions) {
@@ -37,16 +42,21 @@ export function useProctoring(options: UseProctoringOptions) {
     maxTabSwitches = 3,
     maxViolations = 5,
     showWarningDurationMs = 4000,
+    enableCamera = true,
   } = options;
 
   const [state, setState] = useState<ProctoringState>({
     isFullscreen: false,
+    isFocused: true,
     tabSwitchCount: 0,
     fullscreenExitCount: 0,
     copyPasteCount: 0,
     violations: [],
     warningMessage: null,
     isTerminated: false,
+    cameraStream: null,
+    cameraError: null,
+    hasCameraPermission: false,
   });
 
   const warningTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -154,12 +164,66 @@ export function useProctoring(options: UseProctoringOptions) {
     };
   }, [enabled, addViolation, showWarning]);
 
-  // ── Tab switch / visibility change ───────────────────────
+  // ── WebRTC Camera Stream Management ────────────────────
+  const startCamera = useCallback(async () => {
+    try {
+      if (!navigator?.mediaDevices?.getUserMedia) {
+        throw new Error("WebRTC Camera is not supported by this browser.");
+      }
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 640 }, height: { ideal: 480 } },
+        audio: false,
+      });
+      setState((prev) => ({
+        ...prev,
+        cameraStream: stream,
+        hasCameraPermission: true,
+        cameraError: null,
+      }));
+      return stream;
+    } catch (err: any) {
+      const msg = err?.message || "Failed to access WebRTC camera feed";
+      setState((prev) => ({
+        ...prev,
+        cameraStream: null,
+        hasCameraPermission: false,
+        cameraError: msg,
+      }));
+      return null;
+    }
+  }, []);
+
+  const stopCamera = useCallback(() => {
+    setState((prev) => {
+      if (prev.cameraStream) {
+        prev.cameraStream.getTracks().forEach((track) => track.stop());
+      }
+      return {
+        ...prev,
+        cameraStream: null,
+        hasCameraPermission: false,
+      };
+    });
+  }, []);
+
+  // Auto-start camera if enableCamera option is true and enabled is true
+  useEffect(() => {
+    if (enabled && enableCamera) {
+      startCamera();
+    }
+    return () => {
+      stopCamera();
+    };
+  }, [enabled, enableCamera, startCamera, stopCamera]);
+
+  // ── Tab switch / visibility change / focus ──────────────
   useEffect(() => {
     if (!enabled) return;
 
     const handleVisibilityChange = () => {
-      if (document.hidden) {
+      const isHidden = document.hidden;
+      setState((prev) => ({ ...prev, isFocused: !isHidden }));
+      if (isHidden) {
         addViolation("tab_switch", "Switched to another tab");
         showWarning("⚠️ Tab switch detected! This activity has been logged.");
       }
@@ -167,18 +231,27 @@ export function useProctoring(options: UseProctoringOptions) {
 
     const handleWindowBlur = () => {
       if (!enabledRef.current) return;
+      setState((prev) => ({ ...prev, isFocused: false }));
       if (!document.hidden) {
         addViolation("window_blur", "Window lost focus (possible app switch / overlay)");
         showWarning("⚠️ Focus lost! Switching windows or using overlays is not allowed.");
       }
     };
 
+    const handleWindowFocus = () => {
+      if (!document.hidden) {
+        setState((prev) => ({ ...prev, isFocused: true }));
+      }
+    };
+
     document.addEventListener("visibilitychange", handleVisibilityChange);
     window.addEventListener("blur", handleWindowBlur);
+    window.addEventListener("focus", handleWindowFocus);
 
     return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       window.removeEventListener("blur", handleWindowBlur);
+      window.removeEventListener("focus", handleWindowFocus);
     };
   }, [enabled, addViolation, showWarning]);
 
@@ -195,7 +268,7 @@ export function useProctoring(options: UseProctoringOptions) {
     const handlePaste = (e: ClipboardEvent) => {
       e.preventDefault();
       addViolation("copy_paste", "Attempted to paste content");
-      showWarning("⚠️ Paste is disabled during the interview.");
+      showWarning("⚠️ Paste is disabled during the interview. Paste attempt recorded.");
     };
 
     const handleCut = (e: ClipboardEvent) => {
@@ -293,5 +366,7 @@ export function useProctoring(options: UseProctoringOptions) {
     requestFullscreen,
     exitFullscreen,
     dismissWarning,
+    startCamera,
+    stopCamera,
   };
 }
