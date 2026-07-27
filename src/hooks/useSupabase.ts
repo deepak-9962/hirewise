@@ -542,6 +542,109 @@ export async function updateInterview(id: string, updates: Record<string, unknow
   return supabase.from("interviews").update(updates).eq("id", id);
 }
 
+// ── Realtime Monitoring Hook ──
+export function useRealtimeMonitoring() {
+  const [liveInterviews, setLiveInterviews] = useState<any[]>([]);
+  const [completedInterviews, setCompletedInterviews] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isConnected, setIsConnected] = useState(false);
+  const [lastEvent, setLastEvent] = useState<string | null>(null);
+
+  const fetchMonitoringData = useCallback(async () => {
+    try {
+      const { data: liveData } = await queryWithFallback(
+        () =>
+          supabase
+            .from("interviews")
+            .select("*, profiles!candidate_id(name, email), jobs(title, department)")
+            .neq("status", "completed")
+            .order("created_at", { ascending: false }),
+        async () => {
+          const { data, error } = await supabase
+            .from("interviews")
+            .select("*")
+            .neq("status", "completed")
+            .order("created_at", { ascending: false });
+          if (error || !data) return { data, error };
+          const withProfiles = await enrichWithProfiles(data, "candidate_id");
+          const withJobs = await enrichWithJobs(withProfiles, "job_id", "id, title, department");
+          return { data: withJobs as any, error: null };
+        }
+      );
+
+      const { data: completedData } = await queryWithFallback(
+        () =>
+          supabase
+            .from("interviews")
+            .select("*, profiles!candidate_id(name, email), jobs(title, department)")
+            .eq("status", "completed")
+            .order("completed_at", { ascending: false })
+            .limit(15),
+        async () => {
+          const { data, error } = await supabase
+            .from("interviews")
+            .select("*")
+            .eq("status", "completed")
+            .order("completed_at", { ascending: false })
+            .limit(15);
+          if (error || !data) return { data, error };
+          const withProfiles = await enrichWithProfiles(data, "candidate_id");
+          const withJobs = await enrichWithJobs(withProfiles, "job_id", "id, title, department");
+          return { data: withJobs as any, error: null };
+        }
+      );
+
+      if (liveData) setLiveInterviews(liveData);
+      if (completedData) setCompletedInterviews(completedData);
+    } catch (err) {
+      console.error("Failed to fetch monitoring data:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchMonitoringData();
+
+    const channel = supabase
+      .channel("realtime-monitoring-channel")
+      .on(
+        "postgres_changes" as any,
+        { event: "*", schema: "public", table: "interviews" },
+        (payload: any) => {
+          const eventMsg = `Interview ${payload.eventType ? payload.eventType.toLowerCase() : "updated"}`;
+          setLastEvent(eventMsg);
+          fetchMonitoringData();
+        }
+      )
+      .on(
+        "postgres_changes" as any,
+        { event: "*", schema: "public", table: "interview_responses" },
+        () => {
+          setLastEvent("Candidate response updated");
+          fetchMonitoringData();
+        }
+      )
+      .subscribe((status: string) => {
+        setIsConnected(status === "SUBSCRIBED");
+      });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchMonitoringData]);
+
+  return {
+    liveInterviews,
+    completedInterviews,
+    loading,
+    isConnected,
+    lastEvent,
+    refetch: fetchMonitoringData,
+  };
+}
+
+
 // ── Interview Responses ──
 export function useInterviewResponses(interviewId?: string) {
   return useSupabaseQuery(
