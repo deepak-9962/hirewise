@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, useRef, useCallback, type ReactNode } from "react";
 import { createClient } from "@/lib/supabase-browser";
 import type { User, Session } from "@supabase/supabase-js";
 
@@ -48,18 +48,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const lastFetchedUserId = useRef<string | null>(null);
 
-  const fetchProfile = async (userId: string) => {
-    const { data } = await supabase
-      .from("profiles")
-      .select("*")
-      .eq("id", userId)
-      .single();
-    setProfile(data as Profile | null);
-  };
+  const fetchProfile = useCallback(async (userId: string, force = false) => {
+    if (!force && lastFetchedUserId.current === userId) return;
+    lastFetchedUserId.current = userId;
+    try {
+      const { data } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", userId)
+        .single();
+      setProfile(data as Profile | null);
+    } catch (err) {
+      console.error("Error fetching profile:", err);
+    }
+  }, [supabase]);
 
   const refreshProfile = async () => {
-    if (user) await fetchProfile(user.id);
+    if (user) await fetchProfile(user.id, true);
   };
 
   useEffect(() => {
@@ -70,6 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (session?.user) {
           await fetchProfile(session.user.id);
         } else {
+          lastFetchedUserId.current = null;
           setProfile(null);
         }
         setLoading(false);
@@ -87,8 +95,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     return () => subscription.unsubscribe();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [fetchProfile, supabase]);
 
   const signOut = async () => {
     // 1. Call server-side API to clear httpOnly cookies
@@ -104,6 +111,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       console.error("Client sign out error:", e);
     }
     // 3. Clear state
+    lastFetchedUserId.current = null;
     setUser(null);
     setProfile(null);
     setSession(null);

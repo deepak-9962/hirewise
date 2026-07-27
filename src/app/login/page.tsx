@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState, Suspense } from "react";
+import { useState, Suspense, useEffect } from "react";
 import { createClient } from "@/lib/supabase-browser";
 
 type UserRole = "candidate" | "recruiter" | "admin";
@@ -24,31 +24,12 @@ function LoginForm() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const getDashboardPath = (role: string, emailStr?: string) => {
-    if (redirectTo) return redirectTo;
-    let finalRole = role;
-    if (!finalRole && emailStr) {
-      if (emailStr.startsWith("recruiter")) finalRole = "recruiter";
-      else if (emailStr.startsWith("admin")) finalRole = "admin";
-      else finalRole = "candidate";
-    }
-    const map: Record<string, string> = {
-      candidate: "/candidate/dashboard",
-      recruiter: "/recruiter/dashboard",
-      admin: "/admin/dashboard",
-    };
-    return map[finalRole] || "/candidate/dashboard";
-  };
-
-  const redirectUser = (targetPath: string) => {
-    router.push(targetPath);
-    // Instant fallback redirect if router push is slow
-    setTimeout(() => {
-      if (window.location.pathname !== targetPath && !window.location.pathname.startsWith(targetPath.split("?")[0])) {
-        window.location.href = targetPath;
-      }
-    }, 100);
-  };
+  // Prefetch dashboards for instant navigation
+  useEffect(() => {
+    router.prefetch("/candidate/dashboard");
+    router.prefetch("/recruiter/dashboard");
+    router.prefetch("/admin/dashboard");
+  }, [router]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -58,7 +39,7 @@ function LoginForm() {
     try {
       const cleanEmail = email.trim().toLowerCase();
 
-      // 1. First attempt direct sign in
+      // 1. Attempt direct sign in
       let { data, error: authError } = await supabase.auth.signInWithPassword({
         email: cleanEmail,
         password,
@@ -87,19 +68,20 @@ function LoginForm() {
       }
 
       if (authError) {
-        if (authError.message.includes("Invalid login credentials")) {
-          setError("Invalid email or password. Please double check your credentials and try again.");
-        } else {
-          setError(authError.message);
-        }
+        setError(
+          authError.message.includes("Invalid login credentials")
+            ? "Invalid email or password. Please double check your credentials and try again."
+            : authError.message
+        );
         setLoading(false);
         return;
       }
 
       if (data?.user) {
         const userRole = (data.user.user_metadata?.role as string) || activeRole;
-        const target = getDashboardPath(userRole, cleanEmail);
-        redirectUser(target);
+        const target = redirectTo || `/${userRole || "candidate"}/dashboard`;
+        router.replace(target);
+        router.refresh();
         return;
       }
     } catch (err) {

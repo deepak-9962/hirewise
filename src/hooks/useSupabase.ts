@@ -816,7 +816,6 @@ export function useDashboardStats(role: string) {
   const [loading, setLoading] = useState(true);
 
   const fetchStats = useCallback(async () => {
-    setLoading(true);
     const results: Record<string, number> = {};
 
     if (role === "admin") {
@@ -849,7 +848,6 @@ export function useDashboardStats(role: string) {
     setLoading(false);
   }, [role]);
 
-  // Initial fetch
   useEffect(() => {
     fetchStats();
   }, [fetchStats]);
