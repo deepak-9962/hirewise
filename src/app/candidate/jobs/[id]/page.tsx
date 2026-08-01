@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useJobById, useCandidateApplications, createApplication } from "@/hooks/useSupabase";
 import { useAuth } from "@/context/AuthContext";
 
+import { SkeletonCard } from "@/components/ui/Skeleton";
+
 export default function CandidateJobDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { user } = useAuth();
@@ -46,8 +48,9 @@ export default function CandidateJobDetailPage({ params }: { params: Promise<{ i
 
   if (jobLoading || appsLoading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <div className="size-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+      <div className="max-w-3xl space-y-4">
+        <SkeletonCard />
+        <SkeletonCard />
       </div>
     );
   }

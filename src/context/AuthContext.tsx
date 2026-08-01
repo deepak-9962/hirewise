@@ -45,13 +45,23 @@ const AuthContext = createContext<AuthContextType>({
 export function AuthProvider({ children }: { children: ReactNode }) {
   const supabase = createClient();
   const [user, setUser] = useState<User | null>(null);
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const [profile, setProfile] = useState<Profile | null>(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const cached = sessionStorage.getItem("hirewise_profile");
+        return cached ? JSON.parse(cached) : null;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  });
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const lastFetchedUserId = useRef<string | null>(null);
 
   const fetchProfile = useCallback(async (userId: string, force = false) => {
-    if (!force && lastFetchedUserId.current === userId) return;
+    if (!force && lastFetchedUserId.current === userId && profile) return;
     lastFetchedUserId.current = userId;
     try {
       const { data } = await supabase
@@ -59,11 +69,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .select("*")
         .eq("id", userId)
         .single();
-      setProfile(data as Profile | null);
+      if (data) {
+        setProfile(data as Profile);
+        try {
+          sessionStorage.setItem("hirewise_profile", JSON.stringify(data));
+        } catch { /* ignore */ }
+      }
     } catch (err) {
       console.error("Error fetching profile:", err);
     }
-  }, [supabase]);
+  }, [supabase, profile]);
 
   const refreshProfile = async () => {
     if (user) await fetchProfile(user.id, true);
@@ -115,6 +130,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setProfile(null);
     setSession(null);
+    try { sessionStorage.removeItem("hirewise_profile"); } catch { /* ignore */ }
     // 4. Clear any remaining cookies & localStorage
     document.cookie.split(";").forEach((c) => {
       const name = c.trim().split("=")[0];

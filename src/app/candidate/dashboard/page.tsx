@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { useCandidateInterviews, useCandidateReports, useCandidateApplications, useJobs } from "@/hooks/useSupabase";
+import { SkeletonCard, Skeleton } from "@/components/ui/Skeleton";
 
 export default function CandidateDashboard() {
   const { user, profile } = useAuth();
@@ -86,9 +87,9 @@ export default function CandidateDashboard() {
               </div>
             </div>
             {jobsLoading ? (
-              <div className="p-10 text-center text-slate-400">
-                <span className="animate-spin material-symbols-outlined text-3xl">progress_activity</span>
-                <p className="mt-2 text-sm">Loading jobs...</p>
+              <div className="p-5 space-y-3 animate-pulse">
+                <SkeletonCard />
+                <SkeletonCard />
               </div>
             ) : filteredJobs.length === 0 ? (
               <div className="p-10 text-center">
@@ -152,9 +153,15 @@ export default function CandidateDashboard() {
             </div>
             <div className="divide-y divide-slate-100 dark:divide-slate-700">
               {isLoading ? (
-                <div className="p-10 text-center text-slate-400">
-                  <span className="animate-spin material-symbols-outlined text-3xl">progress_activity</span>
-                  <p className="mt-2">Loading...</p>
+                <div className="p-5 space-y-3 animate-pulse">
+                  <div className="flex items-center gap-4">
+                    <Skeleton height="48px" width="48px" rounded="rounded-xl" />
+                    <div className="space-y-2 flex-1">
+                      <Skeleton height="16px" width="160px" />
+                      <Skeleton height="12px" width="100px" />
+                    </div>
+                    <Skeleton height="36px" width="80px" rounded="rounded-lg" />
+                  </div>
                 </div>
               ) : upcoming.length > 0 ? upcoming.map((interview) => (
                 <div key={String(interview.id)} className="p-5 flex items-center justify-between">

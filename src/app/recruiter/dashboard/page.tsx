@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useDashboardStats, useAllInterviews, useJobs } from "@/hooks/useSupabase";
 
+import { SkeletonDashboard } from "@/components/ui/Skeleton";
+
 export default function RecruiterDashboard() {
   const { stats: dashStats, loading: statsLoading } = useDashboardStats("recruiter");
   const { data: interviews, loading: interviewsLoading } = useAllInterviews();
@@ -19,11 +21,7 @@ export default function RecruiterDashboard() {
   const activeJobs = (jobsData ?? []) as any[];
 
   if (statsLoading || interviewsLoading || jobsLoading) {
-    return (
-      <div className="animate-fade-in flex items-center justify-center py-20">
-        <div className="size-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
-      </div>
-    );
+    return <SkeletonDashboard />;
   }
 
   return (

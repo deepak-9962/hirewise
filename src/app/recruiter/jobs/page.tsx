@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useJobs, createJob, deleteJob } from "@/hooks/useSupabase";
 import { useAuth } from "@/context/AuthContext";
+import { SkeletonGrid } from "@/components/ui/Skeleton";
 
 export default function RecruiterJobsPage() {
   const { user } = useAuth();
@@ -104,9 +105,7 @@ export default function RecruiterJobsPage() {
 
       {/* Jobs List */}
       {loading ? (
-        <div className="flex items-center justify-center py-20">
-          <div className="size-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
-        </div>
+        <SkeletonGrid count={4} columns="grid-cols-1 md:grid-cols-2" />
       ) : jobs.length === 0 ? (
         <div className="bg-white dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 p-12 text-center">
           <span className="material-symbols-outlined text-4xl text-slate-300 block mb-3">work_off</span>

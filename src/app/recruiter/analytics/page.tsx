@@ -18,14 +18,14 @@ import {
 } from "recharts";
 import { useAnalyticsData } from "@/hooks/useAnalytics";
 
+import { Skeleton } from "@/components/ui/Skeleton";
+
 // ── Skeleton placeholder while loading ──
 function ChartSkeleton() {
   return (
-    <div className="flex items-center justify-center h-[300px]">
-      <div className="flex flex-col items-center gap-3">
-        <div className="w-10 h-10 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin" />
-        <span className="text-sm text-slate-400">Loading data…</span>
-      </div>
+    <div className="h-[300px] flex flex-col justify-center gap-4 p-4 animate-pulse">
+      <Skeleton height="200px" width="100%" rounded="rounded-xl" />
+      <Skeleton height="20px" width="60%" />
     </div>
   );
 }

@@ -46,15 +46,21 @@ async function enrichWithJobs<T extends Record<string, any>>(
   return items.map((i) => ({ ...i, jobs: map.get(i[idField]) ?? null }));
 }
 
-// ── Generic fetch helper (with optional polling) ──
+// ── Generic fetch helper (with optional polling & instant SWR memory cache) ──
+const queryMemoryCache = new Map<string, any>();
+
 export function useSupabaseQuery<T>(
   queryFn: () => PromiseLike<{ data: T | null; error: unknown }>,
   deps: unknown[] = [],
   options: { enabled?: boolean; pollInterval?: number } = {}
 ) {
   const { enabled = true, pollInterval } = options;
-  const [data, setData] = useState<T | null>(null);
-  const [loading, setLoading] = useState(true);
+  const cacheKey = JSON.stringify(deps);
+
+  const [data, setData] = useState<T | null>(() => {
+    return queryMemoryCache.has(cacheKey) ? queryMemoryCache.get(cacheKey) : null;
+  });
+  const [loading, setLoading] = useState<boolean>(() => !queryMemoryCache.has(cacheKey));
   const [error, setError] = useState<string | null>(null);
 
   // Always use latest queryFn via ref (avoids stale closure issues)
@@ -66,18 +72,23 @@ export function useSupabaseQuery<T>(
       setLoading(false);
       return;
     }
-    setLoading(true);
+    if (!queryMemoryCache.has(cacheKey)) {
+      setLoading(true);
+    }
     setError(null);
     try {
       const { data, error } = await queryFnRef.current();
-      if (error) setError(String(error));
-      else setData(data);
+      if (error) {
+        setError(String(error));
+      } else {
+        setData(data);
+        queryMemoryCache.set(cacheKey, data);
+      }
     } catch (err) {
       setError(String(err));
     }
     setLoading(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [...deps, enabled]);
+  }, [cacheKey, enabled]);
 
   useEffect(() => {
     refetch();

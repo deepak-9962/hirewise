@@ -36,6 +36,8 @@ const mockRecentlyCompleted: CompletedCandidate[] = [
   { id: "mock-6", name: "Eva Martinez", job: "DevOps Engineer", score: 68, completedAt: "1d ago" },
 ];
 
+import { SkeletonGrid } from "@/components/ui/Skeleton";
+
 export default function MonitoringPage() {
   const { liveInterviews, completedInterviews, loading, isConnected, lastEvent } = useRealtimeMonitoring();
   const [localLive, setLocalLive] = useState<LiveCandidate[]>([]);
@@ -188,9 +190,7 @@ export default function MonitoringPage() {
 
       {/* Live Candidates Grid */}
       {loading ? (
-        <div className="flex justify-center items-center py-16">
-          <div className="size-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin"></div>
-        </div>
+        <SkeletonGrid count={3} columns="grid-cols-1 md:grid-cols-3" />
       ) : localLive.length === 0 ? (
         <div className="bg-white dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 p-12 text-center">
           <span className="material-symbols-outlined text-4xl text-slate-300 block mb-2">videocam_off</span>

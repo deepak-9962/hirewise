@@ -10,6 +10,8 @@ const difficultyColor: Record<string, string> = {
   Hard: "bg-red-100 text-red-700",
 };
 
+import { SkeletonGrid } from "@/components/ui/Skeleton";
+
 export default function QuestionBankPage() {
   const { user } = useAuth();
   const [showAdd, setShowAdd] = useState(false);
@@ -120,9 +122,7 @@ export default function QuestionBankPage() {
 
       {/* Questions List */}
       {loading ? (
-        <div className="flex items-center justify-center py-20">
-          <div className="size-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
-        </div>
+        <SkeletonGrid count={4} columns="grid-cols-1" />
       ) : questions.length === 0 ? (
         <div className="bg-white dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 p-12 text-center">
           <span className="material-symbols-outlined text-4xl text-slate-300 block mb-3">quiz</span>

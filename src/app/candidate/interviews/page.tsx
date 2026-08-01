@@ -14,6 +14,8 @@ interface InterviewRow {
   jobs?: { title: string; department: string } | null;
 }
 
+import { SkeletonGrid } from "@/components/ui/Skeleton";
+
 export default function CandidateInterviewsPage() {
   const { user } = useAuth();
   const { data, loading } = useCandidateInterviews(user?.id);
@@ -32,10 +34,7 @@ export default function CandidateInterviewsPage() {
       </div>
 
       {loading ? (
-        <div className="flex flex-col items-center justify-center py-20">
-          <span className="animate-spin material-symbols-outlined text-primary text-4xl">progress_activity</span>
-          <p className="text-slate-500 mt-3">Loading interviews...</p>
-        </div>
+        <SkeletonGrid count={4} columns="grid-cols-1 md:grid-cols-2" />
       ) : (
         <>
           {/* Upcoming */}

@@ -4,6 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { useAllReports, updateReport } from "@/hooks/useSupabase";
 
+import { SkeletonTable } from "@/components/ui/Skeleton";
+
 export default function RecruiterReportsPage() {
   const { data, loading, refetch } = useAllReports();
   const [feedbackModal, setFeedbackModal] = useState<{ id: string; name: string } | null>(null);
@@ -47,9 +49,7 @@ export default function RecruiterReportsPage() {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-20">
-          <div className="size-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
-        </div>
+        <SkeletonTable rows={5} cols={6} />
       ) : reports.length === 0 ? (
         <div className="bg-white dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 p-16 text-center">
           <span className="material-symbols-outlined text-5xl text-slate-300 block mb-3">description</span>

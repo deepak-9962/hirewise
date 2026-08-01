@@ -31,6 +31,8 @@ function getRecommendationBadge(rec: string) {
   return map[rec] ?? { label: rec, color: "text-slate-600 bg-slate-100" };
 }
 
+import { SkeletonGrid } from "@/components/ui/Skeleton";
+
 export default function ATSPipelinePage() {
   const { user } = useAuth();
   const { data: jobsData } = useJobs();
@@ -395,9 +397,7 @@ export default function ATSPipelinePage() {
 
       {/* Loading */}
       {loading ? (
-        <div className="flex items-center justify-center py-20">
-          <div className="size-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
-        </div>
+        <SkeletonGrid count={6} columns="grid-cols-1 md:grid-cols-3" />
       ) : applications.length === 0 ? (
         <div className="text-center py-20">
           <span className="material-symbols-outlined text-5xl text-slate-300 block mb-3">inbox</span>

@@ -22,6 +22,8 @@ interface ReportRow {
   } | null;
 }
 
+import { SkeletonCard } from "@/components/ui/Skeleton";
+
 export default function CandidateReportsPage() {
   const { user } = useAuth();
   const { data, loading } = useCandidateReports(user?.id);
@@ -35,9 +37,9 @@ export default function CandidateReportsPage() {
       </div>
 
       {loading ? (
-        <div className="flex flex-col items-center justify-center py-20">
-          <span className="animate-spin material-symbols-outlined text-primary text-4xl">progress_activity</span>
-          <p className="text-slate-500 mt-3">Loading your reports...</p>
+        <div className="space-y-4">
+          <SkeletonCard />
+          <SkeletonCard />
         </div>
       ) : reports.length === 0 ? (
         <div className="bg-white dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700 p-16 text-center">

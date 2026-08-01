@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef, use } from "react";
 import dynamic from "next/dynamic";
 import { useAuth } from "@/context/AuthContext";
 import { useProctoring } from "@/hooks/useProctoring";
+import { Skeleton } from "@/components/ui/Skeleton";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
 
@@ -384,10 +385,14 @@ export default function InterviewSessionPage({ params }: { params: Promise<{ id:
 
   if (questionsLoading) {
     return (
-      <div className="min-h-screen bg-background-light dark:bg-background-dark flex items-center justify-center">
-        <div className="text-center">
-          <div className="size-10 border-4 border-primary/30 border-t-primary rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-sm text-slate-500">Loading interview questions...</p>
+      <div className="min-h-screen bg-background-light dark:bg-background-dark flex items-center justify-center p-6">
+        <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 p-8 space-y-4 animate-pulse">
+          <Skeleton height="28px" width="70%" className="mx-auto" />
+          <Skeleton height="16px" width="50%" className="mx-auto" />
+          <div className="pt-4 space-y-3">
+            <Skeleton height="40px" width="100%" rounded="rounded-xl" />
+            <Skeleton height="40px" width="100%" rounded="rounded-xl" />
+          </div>
         </div>
       </div>
     );

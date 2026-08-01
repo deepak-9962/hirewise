@@ -4,11 +4,19 @@ import { NextResponse, type NextRequest } from "next/server";
 export async function middleware(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
+  // Fast-path: Skip middleware processing for API routes, assets, and non-protected routes
+  if (
+    pathname.startsWith("/api/") ||
+    pathname.startsWith("/_next/") ||
+    pathname === "/favicon.ico"
+  ) {
+    return NextResponse.next({ request });
+  }
+
   const protectedPaths = ["/candidate", "/recruiter", "/admin", "/interview"];
   const isProtected = protectedPaths.some((path) => pathname.startsWith(path));
   const isAuthPath = pathname === "/login" || pathname === "/signup";
 
-  // Fast-path: Skip Supabase auth network calls on public routes and API endpoints
   if (!isProtected && !isAuthPath) {
     return NextResponse.next({ request });
   }
@@ -80,6 +88,6 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|api/|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

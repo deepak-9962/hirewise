@@ -48,6 +48,8 @@ const appStatusLabels: Record<string, string> = {
 
 type Tab = "overview" | "questions" | "applications";
 
+import { SkeletonCard } from "@/components/ui/Skeleton";
+
 export default function ManageJobPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const { data: job, loading: jobLoading, refetch: refetchJob } = useJobById(id);
@@ -174,8 +176,9 @@ export default function ManageJobPage({ params }: { params: Promise<{ id: string
 
   if (jobLoading) {
     return (
-      <div className="flex items-center justify-center py-20">
-        <div className="size-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin" />
+      <div className="max-w-6xl space-y-4">
+        <SkeletonCard />
+        <SkeletonCard />
       </div>
     );
   }

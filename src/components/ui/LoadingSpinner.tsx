@@ -1,5 +1,7 @@
 "use client";
 
+import { SkeletonCard } from "./Skeleton";
+
 interface LoadingSpinnerProps {
   size?: "sm" | "md" | "lg";
   text?: string;
@@ -9,22 +11,15 @@ export default function LoadingSpinner({
   size = "md",
   text,
 }: LoadingSpinnerProps) {
-  const sizeMap = {
-    sm: "text-xl",
-    md: "text-3xl",
-    lg: "text-5xl",
-  };
-
   return (
-    <div className="flex flex-col items-center justify-center gap-3 py-12">
-      <span
-        className={`animate-spin material-symbols-outlined text-primary ${sizeMap[size]}`}
-      >
-        progress_activity
-      </span>
+    <div className="w-full space-y-4 py-6 animate-pulse">
       {text && (
-        <p className="text-sm text-slate-500 dark:text-slate-400">{text}</p>
+        <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider text-center">{text}</p>
       )}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <SkeletonCard />
+        <SkeletonCard className="hidden md:block" />
+      </div>
     </div>
   );
 }
