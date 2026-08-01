@@ -40,7 +40,7 @@ export default function Header() {
             </div>
           </Link>
 
-          {/* Desktop Nav */}
+          {/* Desktop Nav (Pricing removed, About added) */}
           <nav className="hidden lg:flex items-center gap-7">
             <a className="text-sm font-medium text-slate-600 hover:text-primary dark:text-slate-300 dark:hover:text-primary transition-colors" href="#portals">
               Portals
@@ -54,8 +54,8 @@ export default function Header() {
             <a className="text-sm font-medium text-slate-600 hover:text-primary dark:text-slate-300 dark:hover:text-primary transition-colors" href="#how-it-works">
               How it Works
             </a>
-            <a className="text-sm font-medium text-slate-600 hover:text-primary dark:text-slate-300 dark:hover:text-primary transition-colors" href="#pricing">
-              Pricing
+            <a className="text-sm font-medium text-slate-600 hover:text-primary dark:text-slate-300 dark:hover:text-primary transition-colors" href="#about">
+              About
             </a>
             <a className="text-sm font-medium text-slate-600 hover:text-primary dark:text-slate-300 dark:hover:text-primary transition-colors" href="#faq">
               FAQ
@@ -174,10 +174,10 @@ export default function Header() {
               </a>
               <a
                 onClick={() => setMobileMenuOpen(false)}
-                href="#pricing"
+                href="#about"
                 className="px-3 py-2 rounded-lg text-sm font-medium text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
               >
-                Pricing
+                About Us
               </a>
               <a
                 onClick={() => setMobileMenuOpen(false)}

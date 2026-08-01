@@ -620,94 +620,78 @@ export default function Home() {
           </div>
         </section>
 
-        {/* PRICING SECTION (#pricing) */}
-        <section id="pricing" className="py-24 bg-white dark:bg-background-dark/90 border-t border-slate-200 dark:border-slate-800">
+        {/* ABOUT SECTION (#about) */}
+        <section id="about" className="py-24 bg-white dark:bg-background-dark/90 border-t border-slate-200 dark:border-slate-800">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center max-w-3xl mx-auto mb-16">
               <span className="text-xs font-bold uppercase tracking-widest text-primary bg-primary/10 px-3 py-1 rounded-full">
-                Simple Pricing
+                About HireWise
               </span>
-              <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-white mt-4 mb-6 tracking-tight">
-                Plans Built for Growing Engineering Teams
+              <h2 className="text-3xl sm:text-5xl font-extrabold text-slate-900 dark:text-white mt-4 mb-6 tracking-tight">
+                Empowering Objective, Skill-First & Bias-Free Hiring
               </h2>
-              <p className="text-slate-600 dark:text-slate-400 text-base sm:text-lg">
-                No hidden fees. Start free and scale up as your candidate volume expands.
+              <p className="text-slate-600 dark:text-slate-400 text-base sm:text-lg leading-relaxed">
+                HireWise was built to transform legacy recruitment processes. By combining real-time multi-language coding environments, live proctoring, and continuous AI fairness auditing, we enable organizations to discover top talent rapidly and without prejudice.
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              {/* Starter */}
-              <div className="bg-background-light dark:bg-slate-900/60 rounded-3xl p-8 border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
-                <div>
-                  <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Candidate Free</h3>
-                  <p className="text-xs text-slate-500 mb-6">For candidates and individual practice</p>
-                  <div className="text-4xl font-black text-slate-900 dark:text-white mb-6">
-                    $0 <span className="text-sm font-normal text-slate-400">/ forever</span>
-                  </div>
-                  <ul className="space-y-3 text-xs text-slate-600 dark:text-slate-400 mb-8">
-                    <li className="flex items-center gap-2"><span className="material-symbols-outlined text-emerald-500 text-sm">check_circle</span> Unlimited Job Applications</li>
-                    <li className="flex items-center gap-2"><span className="material-symbols-outlined text-emerald-500 text-sm">check_circle</span> Interactive AI Interview Access</li>
-                    <li className="flex items-center gap-2"><span className="material-symbols-outlined text-emerald-500 text-sm">check_circle</span> Assessment Result Feedback Reports</li>
-                    <li className="flex items-center gap-2"><span className="material-symbols-outlined text-emerald-500 text-sm">check_circle</span> Candidate Profile Builder</li>
-                  </ul>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8 mb-16">
+              <div className="bg-background-light dark:bg-slate-900/60 rounded-3xl p-8 border border-slate-200 dark:border-slate-800 hover:border-primary/50 transition-all">
+                <div className="size-12 rounded-2xl bg-blue-500/10 text-blue-600 flex items-center justify-center mb-6">
+                  <span className="material-symbols-outlined text-3xl">target</span>
                 </div>
-                <Link
-                  href="/signup"
-                  className="w-full bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-white font-bold text-sm py-3 rounded-xl text-center hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors"
-                >
-                  Create Candidate Account
-                </Link>
+                <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Skill-First Approach</h3>
+                <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                  Focus purely on verified technical competency, algorithmic efficiency, and structured problem-solving rather than resume keywords.
+                </p>
               </div>
 
-              {/* Recruiter Pro */}
-              <div className="bg-background-light dark:bg-slate-900/90 rounded-3xl p-8 border-2 border-primary shadow-xl flex flex-col justify-between relative overflow-hidden">
-                <div className="absolute top-0 right-0 bg-primary text-white text-[10px] font-bold px-3 py-1 rounded-bl-xl uppercase">
-                  Recommended
+              <div className="bg-background-light dark:bg-slate-900/60 rounded-3xl p-8 border border-slate-200 dark:border-slate-800 hover:border-emerald-500/50 transition-all">
+                <div className="size-12 rounded-2xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center mb-6">
+                  <span className="material-symbols-outlined text-3xl">verified_user</span>
                 </div>
-                <div>
-                  <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Recruiter Pro</h3>
-                  <p className="text-xs text-slate-500 mb-6">For growing teams & tech startups</p>
-                  <div className="text-4xl font-black text-slate-900 dark:text-white mb-6">
-                    $149 <span className="text-sm font-normal text-slate-400">/ month</span>
-                  </div>
-                  <ul className="space-y-3 text-xs text-slate-600 dark:text-slate-400 mb-8">
-                    <li className="flex items-center gap-2"><span className="material-symbols-outlined text-emerald-500 text-sm">check_circle</span> Unlimited Job Postings</li>
-                    <li className="flex items-center gap-2"><span className="material-symbols-outlined text-emerald-500 text-sm">check_circle</span> Full ATS Candidate Kanban Pipeline</li>
-                    <li className="flex items-center gap-2"><span className="material-symbols-outlined text-emerald-500 text-sm">check_circle</span> Live Anti-Cheating Proctoring Feed</li>
-                    <li className="flex items-center gap-2"><span className="material-symbols-outlined text-emerald-500 text-sm">check_circle</span> AI Question Bank & Test Generator</li>
-                    <li className="flex items-center gap-2"><span className="material-symbols-outlined text-emerald-500 text-sm">check_circle</span> hiring Analytics & Candidate Reports</li>
-                  </ul>
-                </div>
-                <Link
-                  href="/signup"
-                  className="w-full bg-primary text-white font-bold text-sm py-3 rounded-xl text-center hover:bg-blue-700 transition-colors shadow-lg shadow-primary/25"
-                >
-                  Start 14-Day Free Trial
-                </Link>
+                <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Anti-Cheating Integrity</h3>
+                <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                  WebRTC live video streams, facial verification, tab switch detection, and copy-paste blocks ensure authentic candidate evaluation.
+                </p>
               </div>
 
-              {/* Enterprise */}
-              <div className="bg-background-light dark:bg-slate-900/60 rounded-3xl p-8 border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
-                <div>
-                  <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">Enterprise</h3>
-                  <p className="text-xs text-slate-500 mb-6">For large enterprises & high-volume hiring</p>
-                  <div className="text-4xl font-black text-slate-900 dark:text-white mb-6">
-                    Custom <span className="text-sm font-normal text-slate-400">/ tailored</span>
-                  </div>
-                  <ul className="space-y-3 text-xs text-slate-600 dark:text-slate-400 mb-8">
-                    <li className="flex items-center gap-2"><span className="material-symbols-outlined text-emerald-500 text-sm">check_circle</span> Everything in Recruiter Pro</li>
-                    <li className="flex items-center gap-2"><span className="material-symbols-outlined text-emerald-500 text-sm">check_circle</span> Dedicated Admin & Security Governance</li>
-                    <li className="flex items-center gap-2"><span className="material-symbols-outlined text-emerald-500 text-sm">check_circle</span> Custom AI Bias Auditing Engine</li>
-                    <li className="flex items-center gap-2"><span className="material-symbols-outlined text-emerald-500 text-sm">check_circle</span> SSO, SAML, & Custom API Integrations</li>
-                    <li className="flex items-center gap-2"><span className="material-symbols-outlined text-emerald-500 text-sm">check_circle</span> 24/7 Priority SLA Support</li>
-                  </ul>
+              <div className="bg-background-light dark:bg-slate-900/60 rounded-3xl p-8 border border-slate-200 dark:border-slate-800 hover:border-indigo-500/50 transition-all">
+                <div className="size-12 rounded-2xl bg-indigo-500/10 text-indigo-600 flex items-center justify-center mb-6">
+                  <span className="material-symbols-outlined text-3xl">balance</span>
                 </div>
-                <button
-                  onClick={() => setDemoModalOpen(true)}
-                  className="w-full bg-slate-900 dark:bg-slate-800 text-white font-bold text-sm py-3 rounded-xl text-center hover:bg-slate-800 transition-colors"
+                <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">AI Demographic Auditing</h3>
+                <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                  Continuous bias monitoring algorithms flag discrepancies across demographic parameters, maintaining strict scoring objectivity.
+                </p>
+              </div>
+
+              <div className="bg-background-light dark:bg-slate-900/60 rounded-3xl p-8 border border-slate-200 dark:border-slate-800 hover:border-purple-500/50 transition-all">
+                <div className="size-12 rounded-2xl bg-purple-500/10 text-purple-600 flex items-center justify-center mb-6">
+                  <span className="material-symbols-outlined text-3xl">bolt</span>
+                </div>
+                <h3 className="text-xl font-bold text-slate-900 dark:text-white mb-2">70% Faster Hiring</h3>
+                <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                  Automate resume parsing, candidate scoring, and ATS kanban pipeline transitions to reduce time-to-hire from weeks to days.
+                </p>
+              </div>
+            </div>
+
+            {/* Mission banner */}
+            <div className="bg-slate-900 text-white rounded-3xl p-8 sm:p-12 border border-slate-800 flex flex-col md:flex-row items-center justify-between gap-8 shadow-2xl">
+              <div className="space-y-3 max-w-2xl">
+                <h3 className="text-2xl font-bold">Our Mission for Modern Workplaces</h3>
+                <p className="text-sm text-slate-300 leading-relaxed">
+                  We believe hiring should be fast, transparent, and fair for every applicant. HireWise bridges the gap between ambitious engineering talent and world-class recruitment teams.
+                </p>
+              </div>
+              <div className="flex gap-4 shrink-0">
+                <Link
+                  href="/candidate/jobs"
+                  className="bg-primary text-white font-bold text-sm px-6 py-3 rounded-xl hover:bg-blue-700 transition-all shadow-lg"
                 >
-                  Request Enterprise Demo
-                </button>
+                  Explore Job Opportunities
+                </Link>
               </div>
             </div>
           </div>
