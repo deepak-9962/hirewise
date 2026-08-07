@@ -30,8 +30,11 @@ interface OllamaResponse {
 
 function getConfig() {
   return {
+    aiProvider: process.env.AI_PROVIDER ?? "ollama",
     ollamaBaseUrl: process.env.OLLAMA_BASE_URL ?? "http://localhost:11434",
     ollamaModel: process.env.OLLAMA_MODEL ?? "mistral",
+    geminiApiKey: process.env.GEMINI_API_KEY ?? "",
+    geminiModel: process.env.GEMINI_MODEL ?? "gemini-1.5-flash",
     timeoutMs: parseInt(process.env.AI_TIMEOUT_MS ?? "30000", 10),
     maxRetries: parseInt(process.env.AI_MAX_RETRIES ?? "2", 10),
   };
@@ -119,12 +122,74 @@ class OllamaProvider implements AIProvider {
   }
 }
 
+// ── Gemini Provider ────────────────────────────────────────
+
+class GeminiProvider implements AIProvider {
+  readonly name = "gemini";
+  readonly model: string;
+  private readonly apiKey: string;
+  private readonly timeoutMs: number;
+
+  constructor(apiKey: string, model: string, timeoutMs: number) {
+    this.apiKey = apiKey;
+    this.model = model;
+    this.timeoutMs = timeoutMs;
+  }
+
+  async generate(prompt: string): Promise<string> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text: prompt,
+                },
+              ],
+            },
+          ],
+        }),
+        signal: controller.signal,
+      });
+
+      if (!res.ok) {
+        const errText = await res.text().catch(() => "");
+        throw new Error(`Gemini returned ${res.status}: ${errText}`);
+      }
+
+      const data = await res.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+      if (!text) {
+        throw new Error("Gemini returned empty response or invalid structure: " + JSON.stringify(data));
+      }
+
+      return text.trim();
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+}
+
 // ── Provider Factory ───────────────────────────────────────
 
 let _cachedProvider: AIProvider | null = null;
 
 function buildProvider(): AIProvider {
   const cfg = getConfig();
+  if (cfg.aiProvider === "gemini") {
+    if (!cfg.geminiApiKey) {
+      throw new Error("GEMINI_API_KEY is not configured in environment variables");
+    }
+    return new GeminiProvider(cfg.geminiApiKey, cfg.geminiModel, cfg.timeoutMs);
+  }
   return new OllamaProvider(cfg.ollamaBaseUrl, cfg.ollamaModel, cfg.timeoutMs);
 }
 

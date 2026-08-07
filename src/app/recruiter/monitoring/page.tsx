@@ -67,7 +67,7 @@ export default function MonitoringPage() {
       });
       setLocalLive(mappedLive);
     } else {
-      setLocalLive(mockLiveCandidates);
+      setLocalLive([]);
     }
 
     if (completedInterviews.length > 0) {
@@ -87,7 +87,7 @@ export default function MonitoringPage() {
       });
       setLocalCompleted(mappedCompleted);
     } else {
-      setLocalCompleted(mockRecentlyCompleted);
+      setLocalCompleted([]);
     }
   }, [liveInterviews, completedInterviews]);
 

@@ -93,28 +93,28 @@ function LoginForm() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white flex flex-col lg:flex-row">
+    <div className="min-h-screen bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 flex flex-col lg:flex-row transition-colors">
       {/* Left side - Portal Branding */}
-      <div className="lg:w-5/12 bg-gradient-to-br from-blue-950 via-slate-900 to-indigo-950 relative flex flex-col justify-between p-8 sm:p-12 border-b lg:border-b-0 lg:border-r border-slate-800">
+      <div className="lg:w-5/12 bg-slate-50 dark:bg-slate-900/40 relative flex flex-col justify-between p-8 sm:p-12 border-b lg:border-b-0 lg:border-r border-slate-200 dark:border-slate-800">
         <div className="relative z-10">
           <Link href="/" className="inline-flex items-center gap-2 mb-10 group">
-            <div className="size-10 rounded-xl bg-primary/20 border border-primary/30 flex items-center justify-center text-primary group-hover:scale-105 transition-transform">
+            <div className="size-10 rounded-xl bg-primary/15 dark:bg-primary/20 border border-primary/20 dark:border-primary/30 flex items-center justify-center text-primary group-hover:scale-105 transition-transform">
               <span className="material-symbols-outlined text-2xl">deployed_code</span>
             </div>
-            <span className="text-2xl font-bold tracking-tight text-white">HIREWISE</span>
+            <span className="text-2xl font-bold tracking-tight text-slate-900 dark:text-white">HIREWISE</span>
           </Link>
-
+ 
           {/* Dynamic Content based on Active Section */}
           <div className="animate-fade-in">
             {activeRole === "candidate" ? (
               <div>
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20 mb-4">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20 mb-4">
                   <span className="material-symbols-outlined text-sm">person</span> Candidate Portal
                 </span>
-                <h2 className="text-3xl sm:text-4xl font-black mb-4 leading-tight text-white">
+                <h2 className="text-3xl sm:text-4xl font-black mb-4 leading-tight text-slate-900 dark:text-white">
                   Ace Your Next Career Move with AI
                 </h2>
-                <p className="text-slate-300 text-base leading-relaxed mb-8">
+                <p className="text-slate-600 dark:text-slate-400 text-base leading-relaxed mb-8">
                   Practice interactive technical assessments, receive real-time feedback, and showcase your skills to top companies.
                 </p>
                 <div className="space-y-3">
@@ -123,8 +123,8 @@ function LoginForm() {
                     { icon: "code", text: "Live interactive coding & system design environments" },
                     { icon: "shield", text: "Fair, bias-aware proctored evaluations" },
                   ].map((item) => (
-                    <div key={item.text} className="flex items-center gap-3 text-slate-300 text-sm">
-                      <span className="material-symbols-outlined text-blue-400 text-lg">{item.icon}</span>
+                    <div key={item.text} className="flex items-center gap-3 text-slate-650 dark:text-slate-450 text-sm">
+                      <span className="material-symbols-outlined text-blue-500 dark:text-blue-400 text-lg">{item.icon}</span>
                       <span>{item.text}</span>
                     </div>
                   ))}
@@ -132,13 +132,13 @@ function LoginForm() {
               </div>
             ) : activeRole === "recruiter" ? (
               <div>
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20 mb-4">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-purple-500/10 text-purple-650 dark:text-purple-400 border border-purple-500/20 mb-4">
                   <span className="material-symbols-outlined text-sm">work</span> Recruiter & HR Portal
                 </span>
-                <h2 className="text-3xl sm:text-4xl font-black mb-4 leading-tight text-white">
+                <h2 className="text-3xl sm:text-4xl font-black mb-4 leading-tight text-slate-900 dark:text-white">
                   Hire 5x Faster with Intelligent AI Assessments
                 </h2>
-                <p className="text-slate-300 text-base leading-relaxed mb-8">
+                <p className="text-slate-600 dark:text-slate-400 text-base leading-relaxed mb-8">
                   Automate candidate screening, review detailed anti-cheat proctoring logs, and discover top-tier talent effortlessly.
                 </p>
                 <div className="space-y-3">
@@ -147,8 +147,8 @@ function LoginForm() {
                     { icon: "gavel", text: "Proctoring & integrity monitoring (WebRTC & anti-cheat)" },
                     { icon: "dashboard", text: "Full ATS pipeline & automated scorecard generation" },
                   ].map((item) => (
-                    <div key={item.text} className="flex items-center gap-3 text-slate-300 text-sm">
-                      <span className="material-symbols-outlined text-purple-400 text-lg">{item.icon}</span>
+                    <div key={item.text} className="flex items-center gap-3 text-slate-650 dark:text-slate-450 text-sm">
+                      <span className="material-symbols-outlined text-purple-500 dark:text-purple-400 text-lg">{item.icon}</span>
                       <span>{item.text}</span>
                     </div>
                   ))}
@@ -156,87 +156,87 @@ function LoginForm() {
               </div>
             ) : (
               <div>
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 mb-4">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-500/10 text-amber-650 dark:text-amber-400 border border-amber-500/20 mb-4">
                   <span className="material-symbols-outlined text-sm">admin_panel_settings</span> Admin Portal
                 </span>
-                <h2 className="text-3xl sm:text-4xl font-black mb-4 leading-tight text-white">
+                <h2 className="text-3xl sm:text-4xl font-black mb-4 leading-tight text-slate-900 dark:text-white">
                   System Administration & Analytics
                 </h2>
-                <p className="text-slate-300 text-base leading-relaxed mb-8">
+                <p className="text-slate-600 dark:text-slate-400 text-base leading-relaxed mb-8">
                   Monitor platform health, track bias alerts, review system logs, and manage user roles across the organization.
                 </p>
               </div>
             )}
           </div>
         </div>
-
-        <div className="mt-10 text-xs text-slate-500">
+ 
+        <div className="mt-10 text-xs text-slate-400 dark:text-slate-500">
           Protected by HireWise Security & Encrypted Authentication.
         </div>
       </div>
-
+ 
       {/* Right side - Clean Sign In Form & Portal Section Tabs */}
-      <div className="flex-1 flex items-center justify-center p-6 sm:p-12 bg-slate-900">
+      <div className="flex-1 flex items-center justify-center p-6 sm:p-12 bg-white dark:bg-slate-900/10">
         <div className="w-full max-w-md">
           {/* Header */}
           <div className="mb-8">
-            <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">Sign In</h1>
-            <p className="text-slate-400 text-sm">Select your portal section below to continue</p>
+            <h1 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mb-2">Sign In</h1>
+            <p className="text-slate-500 dark:text-slate-400 text-sm">Select your portal section below to continue</p>
           </div>
-
+ 
           {/* Role Section Tabs */}
-          <div className="grid grid-cols-3 gap-1 bg-slate-800/80 p-1.5 rounded-xl border border-slate-700/80 mb-6">
+          <div className="grid grid-cols-3 gap-1 bg-slate-100 dark:bg-slate-800 p-1.5 rounded-xl border border-slate-200 dark:border-slate-700 mb-6">
             <button
               type="button"
               onClick={() => setActiveRole("candidate")}
               className={`py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
                 activeRole === "candidate"
                   ? "bg-blue-600 text-white shadow-md shadow-blue-600/30"
-                  : "text-slate-400 hover:text-white hover:bg-slate-700/50"
+                  : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-200/50 dark:hover:bg-slate-700/50"
               }`}
             >
               <span className="material-symbols-outlined text-base">person</span>
               Candidate
             </button>
-
+ 
             <button
               type="button"
               onClick={() => setActiveRole("recruiter")}
               className={`py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
                 activeRole === "recruiter"
                   ? "bg-purple-600 text-white shadow-md shadow-purple-600/30"
-                  : "text-slate-400 hover:text-white hover:bg-slate-700/50"
+                  : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-200/50 dark:hover:bg-slate-700/50"
               }`}
             >
               <span className="material-symbols-outlined text-base">work</span>
               Recruiter
             </button>
-
+ 
             <button
               type="button"
               onClick={() => setActiveRole("admin")}
               className={`py-2.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
                 activeRole === "admin"
                   ? "bg-amber-600 text-white shadow-md shadow-amber-600/30"
-                  : "text-slate-400 hover:text-white hover:bg-slate-700/50"
+                  : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white hover:bg-slate-200/50 dark:hover:bg-slate-700/50"
               }`}
             >
               <span className="material-symbols-outlined text-base">admin_panel_settings</span>
               Admin
             </button>
           </div>
-
+ 
           {error && (
-            <div className="mb-6 p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-xs sm:text-sm flex items-start gap-2 animate-fade-in">
-              <span className="material-symbols-outlined text-red-400 text-base mt-0.5">error</span>
+            <div className="mb-6 p-4 rounded-xl bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-xs sm:text-sm flex items-start gap-2 animate-fade-in">
+              <span className="material-symbols-outlined text-red-500 dark:text-red-400 text-base mt-0.5">error</span>
               <span>{error}</span>
             </div>
           )}
-
+ 
           {/* Sign In Form */}
           <form className="space-y-4" onSubmit={handleLogin}>
             <div>
-              <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-1.5">
+              <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-1.5">
                 {activeRole === "candidate" ? "Candidate Email" : activeRole === "recruiter" ? "Company / Recruiter Email" : "Admin Email"}
               </label>
               <div className="relative">
@@ -246,7 +246,7 @@ function LoginForm() {
                   required
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-700 bg-slate-800/90 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm transition-all"
+                  className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm transition-all"
                   placeholder={
                     activeRole === "candidate"
                       ? "you@example.com"
@@ -257,10 +257,10 @@ function LoginForm() {
                 />
               </div>
             </div>
-
+ 
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider">Password</label>
+                <label className="block text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Password</label>
                 <a href="#" className="text-xs text-primary font-medium hover:underline">Forgot password?</a>
               </div>
               <div className="relative">
@@ -270,13 +270,13 @@ function LoginForm() {
                   required
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-10 py-3 rounded-xl border border-slate-700 bg-slate-800/90 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm transition-all"
+                  className="w-full pl-10 pr-10 py-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-sm transition-all"
                   placeholder="••••••••"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword((prev) => !prev)}
-                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors"
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 dark:hover:text-white transition-colors"
                 >
                   <span className="material-symbols-outlined text-lg">
                     {showPassword ? "visibility_off" : "visibility"}
@@ -284,19 +284,19 @@ function LoginForm() {
                 </button>
               </div>
             </div>
-
+ 
             <div className="flex items-center justify-between py-1">
-              <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-400">
+              <label className="flex items-center gap-2 cursor-pointer text-xs text-slate-500 dark:text-slate-400">
                 <input
                   type="checkbox"
                   checked={rememberMe}
                   onChange={(e) => setRememberMe(e.target.checked)}
-                  className="rounded border-slate-700 bg-slate-800 text-primary focus:ring-0 size-4"
+                  className="rounded border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-primary focus:ring-0 size-4"
                 />
                 Remember me
               </label>
             </div>
-
+ 
             <button
               type="submit"
               disabled={loading}
@@ -321,9 +321,9 @@ function LoginForm() {
               )}
             </button>
           </form>
-
-          <div className="mt-8 text-center border-t border-slate-800 pt-6">
-            <p className="text-sm text-slate-400">
+ 
+          <div className="mt-8 text-center border-t border-slate-200 dark:border-slate-800 pt-6">
+            <p className="text-sm text-slate-550 dark:text-slate-400">
               Don&apos;t have an account yet?{" "}
               <Link href="/signup" className="text-primary font-semibold hover:underline">Create an account</Link>
             </p>

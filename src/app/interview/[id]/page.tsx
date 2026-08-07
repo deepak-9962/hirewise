@@ -92,6 +92,7 @@ function WebRTCCameraPreview({
 
 interface Question {
   id: number;
+  dbId?: string;
   type: "descriptive" | "coding";
   difficulty: "Easy" | "Medium" | "Hard";
   skill: string;
@@ -205,6 +206,7 @@ export default function InterviewSessionPage({ params }: { params: Promise<{ id:
         if (data.questions?.length) {
           const mapped: Question[] = data.questions.map((q: any, i: number) => ({
             id: i + 1,
+            dbId: q.id,
             type: (q.type as "descriptive" | "coding") ?? "descriptive",
             difficulty: (q.difficulty as "Easy" | "Medium" | "Hard") ?? "Medium",
             skill: q.skill ?? "",

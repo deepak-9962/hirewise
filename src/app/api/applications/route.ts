@@ -72,57 +72,64 @@ export async function GET(req: NextRequest) {
 
 // POST /api/applications  — candidate applies
 export async function POST(req: NextRequest) {
-  const body = await req.json();
-  const { job_id, candidate_id, cover_note } = body;
+  try {
+    const body = await req.json();
+    const { job_id, candidate_id, cover_note } = body;
 
-  if (!job_id || !candidate_id) {
-    return NextResponse.json({ error: "job_id and candidate_id required" }, { status: 400 });
-  }
-
-  const admin = getSupabaseAdmin();
-
-  // Ensure candidate profile exists
-  const { data: profile } = await admin
-    .from("profiles")
-    .select("id")
-    .eq("id", candidate_id)
-    .single();
-
-  if (!profile) {
-    return NextResponse.json({ error: "Candidate profile not found" }, { status: 404 });
-  }
-
-  const { data, error } = await admin
-    .from("applications")
-    .insert({
-      job_id,
-      candidate_id,
-      cover_note,
-      status: "applied",
-    })
-    .select()
-    .single();
-
-  if (error) {
-    if (error.code === "23505") {
-      return NextResponse.json({ error: "Already applied to this job" }, { status: 409 });
+    if (!job_id || !candidate_id) {
+      return NextResponse.json({ error: "job_id and candidate_id required" }, { status: 400 });
     }
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
 
-  // Increment applicants_count on the job
-  const { data: jobRow } = await admin
-    .from("jobs")
-    .select("applicants_count")
-    .eq("id", job_id)
-    .single();
+    const admin = getSupabaseAdmin();
 
-  if (jobRow) {
-    await admin
+    // Ensure candidate profile exists
+    const { data: profile, error: profileErr } = await admin
+      .from("profiles")
+      .select("id")
+      .eq("id", candidate_id)
+      .single();
+
+    if (profileErr || !profile) {
+      console.error("Profile check error or profile not found:", profileErr);
+      return NextResponse.json({ error: "Candidate profile not found" }, { status: 404 });
+    }
+
+    const { data, error } = await admin
+      .from("applications")
+      .insert({
+        job_id,
+        candidate_id,
+        cover_note,
+        status: "applied",
+      })
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Application insert error:", error);
+      if (error.code === "23505") {
+        return NextResponse.json({ error: "Already applied to this job" }, { status: 409 });
+      }
+      return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+
+    // Increment applicants_count on the job
+    const { data: jobRow } = await admin
       .from("jobs")
-      .update({ applicants_count: ((jobRow as any).applicants_count || 0) + 1 })
-      .eq("id", job_id);
-  }
+      .select("applicants_count")
+      .eq("id", job_id)
+      .single();
 
-  return NextResponse.json(data, { status: 201 });
+    if (jobRow) {
+      await admin
+        .from("jobs")
+        .update({ applicants_count: ((jobRow as any).applicants_count || 0) + 1 })
+        .eq("id", job_id);
+    }
+
+    return NextResponse.json(data, { status: 201 });
+  } catch (error: any) {
+    console.error("POST /api/applications exception:", error);
+    return NextResponse.json({ error: error.message || "An unexpected error occurred" }, { status: 500 });
+  }
 }

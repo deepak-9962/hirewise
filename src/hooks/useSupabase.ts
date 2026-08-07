@@ -746,6 +746,33 @@ export function useAllReports() {
   );
 }
 
+export function useReport(reportId?: string) {
+  return useSupabaseQuery(
+    async () => {
+      return queryWithFallback(
+        () =>
+          supabase
+            .from("reports")
+            .select("*, profiles!candidate_id(name, email), interviews(*, jobs(title, department))")
+            .eq("id", reportId!)
+            .single(),
+        async () => {
+          const { data, error } = await supabase
+            .from("reports")
+            .select("*")
+            .eq("id", reportId!)
+            .single();
+          if (error || !data) return { data, error };
+          const enriched = await enrichWithProfiles([data], "candidate_id");
+          return { data: enriched[0] as any, error: null };
+        }
+      );
+    },
+    [reportId],
+    { enabled: !!reportId }
+  );
+}
+
 export async function updateReport(id: string, updates: Record<string, unknown>) {
   return supabase.from("reports").update(updates).eq("id", id);
 }

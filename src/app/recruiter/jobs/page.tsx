@@ -146,7 +146,7 @@ export default function RecruiterJobsPage() {
                       job.status === "paused" ? "bg-amber-100 text-amber-700" :
                       "bg-slate-100 text-slate-500"
                     }`}>
-                      {job.status.charAt(0).toUpperCase() + job.status.slice(1)}
+                      {(job.status || "active").charAt(0).toUpperCase() + (job.status || "active").slice(1)}
                     </span>
                   </td>
                   <td className="px-5 py-4 text-right">
