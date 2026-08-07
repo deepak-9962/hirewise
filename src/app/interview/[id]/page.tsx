@@ -5,6 +5,7 @@ import dynamic from "next/dynamic";
 import { useAuth } from "@/context/AuthContext";
 import { useProctoring } from "@/hooks/useProctoring";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { createClient } from "@/lib/supabase-browser";
 
 const MonacoEditor = dynamic(() => import("@monaco-editor/react"), { ssr: false });
 
@@ -254,6 +255,36 @@ export default function InterviewSessionPage({ params }: { params: Promise<{ id:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showComplete, proctoring.isTerminated]);
 
+  // Update DB to mark as cancelled when proctoring terminates it
+  useEffect(() => {
+    if (proctoring.isTerminated && interviewId && interviewId !== "demo") {
+      const markCancelled = async () => {
+        const supabase = createClient();
+        const { error } = await supabase
+          .from("interviews")
+          .update({
+            status: "cancelled",
+            completed_at: new Date().toISOString(),
+            proctoring_data: {
+              violations: proctoring.violations,
+              copyPasteCount: proctoring.copyPasteCount,
+              tabSwitchCount: proctoring.tabSwitchCount,
+              totalViolations: proctoring.violations.length,
+              fullscreenExitCount: proctoring.fullscreenExitCount,
+            },
+          })
+          .eq("id", interviewId);
+
+        if (error) {
+          console.error("Failed to mark interview as cancelled in DB:", error);
+        } else {
+          console.log("Interview marked as cancelled in DB due to proctoring termination.");
+        }
+      };
+      markCancelled();
+    }
+  }, [proctoring.isTerminated, interviewId, proctoring.violations, proctoring.copyPasteCount, proctoring.tabSwitchCount, proctoring.fullscreenExitCount]);
+
   const handleSubmit = useCallback(async () => {
     setIsSubmitted((prev) => ({ ...prev, [currentQ.id]: true }));
     setEvaluating((prev) => ({ ...prev, [currentQ.id]: true }));
@@ -453,6 +484,16 @@ export default function InterviewSessionPage({ params }: { params: Promise<{ id:
             onClick={async () => {
               await proctoring.requestFullscreen();
               setInterviewStarted(true);
+              if (interviewId && interviewId !== "demo") {
+                const supabase = createClient();
+                await supabase
+                  .from("interviews")
+                  .update({
+                    status: "in-progress",
+                    started_at: new Date().toISOString(),
+                  })
+                  .eq("id", interviewId);
+              }
             }}
             className="bg-primary text-white text-sm font-bold px-8 py-3 rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-primary/20 w-full flex items-center justify-center gap-2"
           >

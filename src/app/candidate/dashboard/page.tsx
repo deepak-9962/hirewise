@@ -29,7 +29,7 @@ export default function CandidateDashboard() {
   });
 
   const allInterviews = (interviews as Record<string, unknown>[] | null) || [];
-  const upcoming = allInterviews.filter((i) => i.status === "scheduled");
+  const upcoming = allInterviews.filter((i) => i.status === "scheduled" || i.status === "in-progress");
   const completed = allInterviews.filter((i) => i.status === "completed");
   const allReports = (reports as Record<string, unknown>[] | null) || [];
   const avgScore = completed.length > 0
