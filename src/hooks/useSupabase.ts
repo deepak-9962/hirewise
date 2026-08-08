@@ -341,21 +341,24 @@ export async function deleteJob(id: string) {
 export function useApplications(jobId?: string) {
   return useRealtimeQuery(
     async () => {
-      return queryWithFallback(
-        () => {
-          let q = supabase.from("applications").select("*, profiles!candidate_id(name, email)");
-          if (jobId && jobId !== "all") q = q.eq("job_id", jobId);
-          return q.order("applied_at", { ascending: false });
-        },
-        async () => {
-          let q = supabase.from("applications").select("*");
-          if (jobId && jobId !== "all") q = q.eq("job_id", jobId);
-          const { data, error } = await q.order("applied_at", { ascending: false });
-          if (error || !data) return { data, error };
-          const enriched = await enrichWithProfiles(data, "candidate_id");
-          return { data: enriched as any, error: null };
+      // 1. Try server API route first (uses Supabase Admin client, bypasses RLS and 0 FK errors!)
+      try {
+        const url = jobId && jobId !== "all" ? `/api/applications?job_id=${jobId}` : "/api/applications";
+        const res = await fetch(url);
+        if (res.ok) {
+          const json = await res.json();
+          if (Array.isArray(json)) return { data: json, error: null };
         }
-      );
+      } catch (e) {
+        console.warn("useApplications API fetch failed:", e);
+      }
+      // 2. Direct browser query fallback without FK embedding syntax
+      let q = supabase.from("applications").select("*");
+      if (jobId && jobId !== "all") q = q.eq("job_id", jobId);
+      const { data, error } = await q.order("applied_at", { ascending: false });
+      if (error || !data) return { data: data ?? [], error };
+      const enriched = await enrichWithProfiles(data, "candidate_id");
+      return { data: enriched as any, error: null };
     },
     { table: "applications", filter: jobId && jobId !== "all" ? `job_id=eq.${jobId}` : undefined },
     [jobId]
@@ -365,24 +368,24 @@ export function useApplications(jobId?: string) {
 export function useCandidateApplications(userId?: string) {
   return useRealtimeQuery(
     async () => {
-      return queryWithFallback(
-        () =>
-          supabase
-            .from("applications")
-            .select("*, jobs(id, title, department, type, status, target_skills)")
-            .eq("candidate_id", userId!)
-            .order("applied_at", { ascending: false }),
-        async () => {
-          const { data, error } = await supabase
-            .from("applications")
-            .select("*")
-            .eq("candidate_id", userId!)
-            .order("applied_at", { ascending: false });
-          if (error || !data) return { data, error };
-          const enriched = await enrichWithJobs(data, "job_id");
-          return { data: enriched as any, error: null };
+      if (!userId) return { data: [], error: null };
+      try {
+        const res = await fetch(`/api/applications?candidate_id=${userId}`);
+        if (res.ok) {
+          const json = await res.json();
+          if (Array.isArray(json)) return { data: json, error: null };
         }
-      );
+      } catch (e) {
+        console.warn("useCandidateApplications API fetch failed:", e);
+      }
+      const { data, error } = await supabase
+        .from("applications")
+        .select("*")
+        .eq("candidate_id", userId!)
+        .order("applied_at", { ascending: false });
+      if (error || !data) return { data: data ?? [], error };
+      const enriched = await enrichWithJobs(data, "job_id");
+      return { data: enriched as any, error: null };
     },
     { table: "applications", filter: userId ? `candidate_id=eq.${userId}` : undefined },
     [userId],
@@ -782,22 +785,24 @@ export async function upsertResponse(response: {
 export function useCandidateReports(candidateId?: string) {
   return useRealtimeQuery(
     async () => {
-      return queryWithFallback(
-        () =>
-          supabase
-            .from("reports")
-            .select("*, interviews(*, jobs(title, department))")
-            .eq("candidate_id", candidateId!)
-            .order("generated_at", { ascending: false }),
-        async () => {
-          const { data, error } = await supabase
-            .from("reports")
-            .select("*")
-            .eq("candidate_id", candidateId!)
-            .order("generated_at", { ascending: false });
-          return { data, error };
+      if (!candidateId) return { data: [], error: null };
+      try {
+        const res = await fetch(`/api/reports?candidate_id=${candidateId}`);
+        if (res.ok) {
+          const json = await res.json();
+          if (Array.isArray(json)) return { data: json, error: null };
         }
-      );
+      } catch (e) {
+        console.warn("useCandidateReports API fetch error:", e);
+      }
+      const { data, error } = await supabase
+        .from("reports")
+        .select("*")
+        .eq("candidate_id", candidateId)
+        .order("generated_at", { ascending: false });
+      if (error || !data) return { data: data ?? [], error };
+      const enriched = await enrichWithProfiles(data, "candidate_id");
+      return { data: enriched as any, error: null };
     },
     { table: "reports", filter: candidateId ? `candidate_id=eq.${candidateId}` : undefined },
     [candidateId],
@@ -808,22 +813,22 @@ export function useCandidateReports(candidateId?: string) {
 export function useAllReports() {
   return useRealtimeQuery(
     async () => {
-      return queryWithFallback(
-        () =>
-          supabase
-            .from("reports")
-            .select("*, profiles!candidate_id(name, email), interviews(*, jobs(title))")
-            .order("generated_at", { ascending: false }),
-        async () => {
-          const { data, error } = await supabase
-            .from("reports")
-            .select("*")
-            .order("generated_at", { ascending: false });
-          if (error || !data) return { data, error };
-          const enriched = await enrichWithProfiles(data, "candidate_id");
-          return { data: enriched as any, error: null };
+      try {
+        const res = await fetch("/api/reports");
+        if (res.ok) {
+          const json = await res.json();
+          if (Array.isArray(json)) return { data: json, error: null };
         }
-      );
+      } catch (e) {
+        console.warn("useAllReports API fetch error:", e);
+      }
+      const { data, error } = await supabase
+        .from("reports")
+        .select("*")
+        .order("generated_at", { ascending: false });
+      if (error || !data) return { data: data ?? [], error };
+      const enriched = await enrichWithProfiles(data, "candidate_id");
+      return { data: enriched as any, error: null };
     },
     { table: "reports" }
   );
@@ -832,24 +837,24 @@ export function useAllReports() {
 export function useReport(reportId?: string) {
   return useRealtimeQuery(
     async () => {
-      return queryWithFallback(
-        () =>
-          supabase
-            .from("reports")
-            .select("*, profiles!candidate_id(name, email), interviews(*, jobs(title, department))")
-            .eq("id", reportId!)
-            .single(),
-        async () => {
-          const { data, error } = await supabase
-            .from("reports")
-            .select("*")
-            .eq("id", reportId!)
-            .single();
-          if (error || !data) return { data, error };
-          const enriched = await enrichWithProfiles([data], "candidate_id");
-          return { data: enriched[0] as any, error: null };
+      if (!reportId) return { data: null, error: null };
+      try {
+        const res = await fetch(`/api/reports/${reportId}`);
+        if (res.ok) {
+          const json = await res.json();
+          if (json.data) return { data: json.data, error: null };
         }
-      );
+      } catch (e) {
+        console.warn("useReport API fetch error:", e);
+      }
+      const { data, error } = await supabase
+        .from("reports")
+        .select("*")
+        .or(`id.eq.${reportId},interview_id.eq.${reportId}`)
+        .maybeSingle();
+      if (error || !data) return { data: null, error };
+      const enriched = await enrichWithProfiles([data], "candidate_id");
+      return { data: enriched[0] as any, error: null };
     },
     { table: "reports", filter: reportId ? `id=eq.${reportId}` : undefined },
     [reportId],
@@ -954,16 +959,21 @@ export function useDashboardStats(role: string) {
     }
 
     if (role === "recruiter") {
-      const [jobs, interviews, completed, candidates] = await Promise.all([
-        supabase.from("jobs").select("id", { count: "exact", head: true }).eq("status", "active"),
-        supabase.from("interviews").select("id", { count: "exact", head: true }),
-        supabase.from("interviews").select("id", { count: "exact", head: true }).eq("status", "completed"),
-        supabase.from("profiles").select("id", { count: "exact", head: true }).eq("role", "candidate"),
-      ]);
-      results.activeJobs = jobs.count ?? 0;
-      results.totalInterviews = interviews.count ?? 0;
-      results.completed = completed.count ?? 0;
-      results.totalCandidates = candidates.count ?? 0;
+      try {
+        const [pipelineRes, activeJobsRes] = await Promise.all([
+          fetch("/api/ats/pipeline").then((r) => (r.ok ? r.json() : null)).catch(() => null),
+          supabase.from("jobs").select("id", { count: "exact", head: true }).eq("status", "active"),
+        ]);
+
+        const apps = pipelineRes?.applications ?? [];
+        results.activeJobs = activeJobsRes?.count ?? 0;
+        results.totalApplications = apps.length;
+        results.totalCandidates = apps.length;
+        results.totalInterviews = apps.filter((a: any) => a.interviews).length;
+        results.completed = apps.filter((a: any) => a.status === "test_completed" || a.interviews?.status === "completed").length;
+      } catch (e) {
+        console.error("Failed to compute recruiter stats:", e);
+      }
     }
 
     setStats(results);

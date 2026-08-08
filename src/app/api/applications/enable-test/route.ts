@@ -14,11 +14,21 @@ export async function POST(req: NextRequest) {
     const admin = getSupabaseAdmin();
 
     // Check if interview already exists for this application or candidate+job
-    const { data: existing } = await admin
+    let { data: existing } = await admin
       .from("interviews")
       .select("id, application_id")
-      .or(`application_id.eq.${application_id},and(candidate_id.eq.${candidate_id},job_id.eq.${job_id})`)
+      .eq("application_id", application_id)
       .maybeSingle();
+
+    if (!existing) {
+      const { data: existingByCandJob } = await admin
+        .from("interviews")
+        .select("id, application_id")
+        .eq("candidate_id", candidate_id)
+        .eq("job_id", job_id)
+        .maybeSingle();
+      existing = existingByCandJob;
+    }
 
     // Count questions available for this job
     const { count: questionsCount } = await admin

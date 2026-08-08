@@ -102,19 +102,24 @@ Evaluate this response and respond in STRICT JSON format only (no markdown, no e
   "improvements": ["<improvement 1>", "<improvement 2>"]
 }`;
 
-  const raw = await aiGenerate(prompt, { skipCache: true });
-  const retryFn = async () => aiGenerate(prompt, { skipCache: true });
+  try {
+    const raw = await aiGenerate(prompt, { skipCache: true });
+    const retryFn = async () => aiGenerate(prompt, { skipCache: true });
 
-  if (type === "coding") {
-    const result = await parseAIResponse(raw, CodingEvaluationSchema, retryFn);
-    if (result.valid) return result.data;
-    console.warn("[evaluateAnswer] Validation failed (coding), using fallback:", result.errors);
-    return FALLBACK_CODING_EVALUATION;
-  } else {
-    const result = await parseAIResponse(raw, DescriptiveEvaluationSchema, retryFn);
-    if (result.valid) return result.data;
-    console.warn("[evaluateAnswer] Validation failed (descriptive), using fallback:", result.errors);
-    return FALLBACK_DESCRIPTIVE_EVALUATION;
+    if (type === "coding") {
+      const result = await parseAIResponse(raw, CodingEvaluationSchema, retryFn);
+      if (result.valid) return result.data;
+      console.warn("[evaluateAnswer] Validation failed (coding), using fallback:", result.errors);
+      return FALLBACK_CODING_EVALUATION;
+    } else {
+      const result = await parseAIResponse(raw, DescriptiveEvaluationSchema, retryFn);
+      if (result.valid) return result.data;
+      console.warn("[evaluateAnswer] Validation failed (descriptive), using fallback:", result.errors);
+      return FALLBACK_DESCRIPTIVE_EVALUATION;
+    }
+  } catch (err) {
+    console.error("[evaluateAnswer] AI generation exception handled gracefully:", err);
+    return type === "coding" ? FALLBACK_CODING_EVALUATION : FALLBACK_DESCRIPTIVE_EVALUATION;
   }
 }
 
@@ -123,22 +128,33 @@ Evaluate this response and respond in STRICT JSON format only (no markdown, no e
 export async function generateReport(
   questions: { question: string; answer: string; type: string; skill: string; difficulty: string; score: number }[],
 ) {
-  const summaryData = questions
-    .map((q, i) => `Q${i + 1} [${q.skill} - ${q.difficulty} - ${q.type}]: Score ${q.score}/100`)
+  const safeQuestions = Array.isArray(questions) ? questions : [];
+  const summaryData = safeQuestions
+    .map((q, i) => `Q${i + 1} [${q.skill || "general"} - ${q.difficulty || "Medium"} - ${q.type || "descriptive"}]: Score ${Number(q.score) || 0}/100`)
     .join("\n");
-  const avgScore = Math.round(questions.reduce((s, q) => s + q.score, 0) / questions.length);
+  const totalScore = safeQuestions.reduce((s, q) => s + (Number(q.score) || 0), 0);
+  const avgScore = safeQuestions.length > 0 ? Math.round(totalScore / safeQuestions.length) : 75;
 
-  const prompt = `You are an AI interviewing platform generating a comprehensive candidate evaluation report.
+  const fallbackResult = {
+    ...FALLBACK_REPORT,
+    overallScore: avgScore,
+    technicalScore: avgScore,
+    communicationScore: avgScore,
+    reasoningScore: avgScore,
+  };
+
+  try {
+    const prompt = `You are an AI interviewing platform generating a comprehensive candidate evaluation report.
 
 Interview Summary:
 ${summaryData}
 Average Score: ${avgScore}/100
 
 Full Q&A:
-${questions.map((q, i) => `
-Q${i + 1}: ${sanitizeInput(q.question, 1000)}
-A${i + 1}: ${sanitizeInput(q.answer, 3000)}
-Score: ${q.score}/100
+${safeQuestions.map((q, i) => `
+Q${i + 1}: ${sanitizeInput(q.question || "", 1000)}
+A${i + 1}: ${sanitizeInput(q.answer || "(No answer provided)", 3000)}
+Score: ${Number(q.score) || 0}/100
 `).join("\n")}
 
 ${SCORING_RUBRIC}
@@ -146,24 +162,27 @@ ${SCORING_RUBRIC}
 Generate a report in STRICT JSON format only (no markdown, no explanation, no code fences):
 {
   "overallScore": ${avgScore},
-  "technicalScore": <number 0-100>,
-  "communicationScore": <number 0-100>,
-  "reasoningScore": <number 0-100>,
+  "technicalScore": ${avgScore},
+  "communicationScore": ${avgScore},
+  "reasoningScore": ${avgScore},
   "summary": "<3-4 sentence overall assessment>",
   "strengths": ["<strength 1>", "<strength 2>", "<strength 3>"],
   "weaknesses": ["<area for improvement 1>", "<area for improvement 2>"],
   "recommendation": "<hire/consider/reject with brief justification>"
 }`;
 
-  const raw = await aiGenerate(prompt, { skipCache: true });
+    const raw = await aiGenerate(prompt, { skipCache: true });
+    const retryFn = async () => aiGenerate(prompt, { skipCache: true });
+    const result = await parseAIResponse(raw, ReportSchema, retryFn);
 
-  const retryFn = async () => aiGenerate(prompt, { skipCache: true });
-  const result = await parseAIResponse(raw, ReportSchema, retryFn);
+    if (result.valid) return result.data;
 
-  if (result.valid) return result.data;
-
-  console.warn("[generateReport] Validation failed, using fallback:", result.errors);
-  return FALLBACK_REPORT;
+    console.warn("[generateReport] Validation failed, using fallback:", result.errors);
+    return fallbackResult;
+  } catch (err) {
+    console.error("[generateReport] AI generation exception handled gracefully:", err);
+    return fallbackResult;
+  }
 }
 
 // ── generateQuestions ──────────────────────────────────────

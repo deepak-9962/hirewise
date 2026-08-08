@@ -45,11 +45,21 @@ export async function PATCH(
 
   // If moving to test_enabled, auto-create interview if not exists
   if (status === "test_enabled") {
-    const { data: existing } = await admin
+    let { data: existing } = await admin
       .from("interviews")
       .select("id")
-      .or(`application_id.eq.${id},and(candidate_id.eq.${app.candidate_id},job_id.eq.${app.job_id})`)
+      .eq("application_id", id)
       .maybeSingle();
+
+    if (!existing) {
+      const { data: existingByCandJob } = await admin
+        .from("interviews")
+        .select("id")
+        .eq("candidate_id", app.candidate_id)
+        .eq("job_id", app.job_id)
+        .maybeSingle();
+      existing = existingByCandJob;
+    }
 
     const { count: questionsCount } = await admin
       .from("job_questions")

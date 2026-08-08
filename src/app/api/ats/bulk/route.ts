@@ -32,11 +32,21 @@ export async function POST(req: NextRequest) {
   // If moving to test_enabled, create interviews for all
   if (status === "test_enabled" && data) {
     for (const app of data as any[]) {
-      const { data: existing } = await admin
+      let { data: existing } = await admin
         .from("interviews")
         .select("id")
-        .or(`application_id.eq.${app.id},and(candidate_id.eq.${app.candidate_id},job_id.eq.${app.job_id})`)
+        .eq("application_id", app.id)
         .maybeSingle();
+
+      if (!existing) {
+        const { data: existingByCandJob } = await admin
+          .from("interviews")
+          .select("id")
+          .eq("candidate_id", app.candidate_id)
+          .eq("job_id", app.job_id)
+          .maybeSingle();
+        existing = existingByCandJob;
+      }
 
       const { count: questionsCount } = await admin
         .from("job_questions")

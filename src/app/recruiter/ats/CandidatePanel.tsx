@@ -274,7 +274,19 @@ export default function CandidatePanel({
               {/* Test Score */}
               {app.interviews && (
                 <section>
-                  <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Test Results</h3>
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider">Test Results</h3>
+                    {(app.reports?.id || app.interviews?.id) && (
+                      <a
+                        href={`/recruiter/reports/${app.reports?.id || app.interviews?.id}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs font-bold text-primary hover:underline flex items-center gap-1"
+                      >
+                        View Full Report <span className="material-symbols-outlined text-xs">open_in_new</span>
+                      </a>
+                    )}
+                  </div>
                   <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-4">
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-sm text-slate-600 dark:text-slate-300">Status</span>

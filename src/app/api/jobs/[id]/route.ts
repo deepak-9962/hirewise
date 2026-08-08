@@ -43,38 +43,46 @@ export async function DELETE(
       return NextResponse.json({ error: "Missing job id" }, { status: 400 });
     }
 
-    const supabaseAdmin = getSupabaseAdmin();
+    const admin = getSupabaseAdmin();
 
-    // 1. Fetch all interview IDs associated with this job
-    const { data: interviews } = await supabaseAdmin
+    // 1. Fetch application IDs for this job
+    const { data: apps } = await admin
+      .from("applications")
+      .select("id")
+      .eq("job_id", id);
+    const appIds = (apps ?? []).map((a: any) => a.id).filter(Boolean);
+
+    // 2. Fetch interview IDs for this job
+    const { data: interviews } = await admin
       .from("interviews")
       .select("id")
       .eq("job_id", id);
-
     const interviewIds = (interviews ?? []).map((i: any) => i.id).filter(Boolean);
 
+    // 3. Clean up interview sub-records
     if (interviewIds.length > 0) {
-      // Clean up interview-dependent records
-      await Promise.all([
-        supabaseAdmin.from("interview_responses").delete().in("interview_id", interviewIds),
-        supabaseAdmin.from("reports").delete().in("interview_id", interviewIds),
-        supabaseAdmin.from("ai_evaluations").delete().in("interview_id", interviewIds),
-        supabaseAdmin.from("bias_alerts").delete().in("interview_id", interviewIds),
-      ]).catch((e) => console.warn("Interview sub-records delete cleanup:", e));
-
-      // Delete interviews
-      await supabaseAdmin.from("interviews").delete().eq("job_id", id);
+      await admin.from("interview_responses").delete().in("interview_id", interviewIds);
+      await admin.from("reports").delete().in("interview_id", interviewIds);
+      await admin.from("ai_evaluations").delete().in("interview_id", interviewIds);
+      await admin.from("bias_alerts").delete().in("interview_id", interviewIds);
     }
 
-    // 2. Clean up job_questions, applications, and questions for this job
-    await Promise.all([
-      supabaseAdmin.from("job_questions").delete().eq("job_id", id),
-      supabaseAdmin.from("applications").delete().eq("job_id", id),
-      supabaseAdmin.from("questions").delete().eq("job_id", id),
-    ]).catch((e) => console.warn("Job sub-records delete cleanup:", e));
+    // 4. Clean up application sub-records
+    if (appIds.length > 0) {
+      await admin.from("pipeline_notes").delete().in("application_id", appIds);
+      await admin.from("resume_scores").delete().in("application_id", appIds);
+    }
 
-    // 3. Delete the job row itself
-    const { error } = await supabaseAdmin.from("jobs").delete().eq("id", id);
+    // 5. Clean up interviews, job_questions, applications
+    await admin.from("interviews").delete().eq("job_id", id);
+    await admin.from("job_questions").delete().eq("job_id", id);
+    await admin.from("applications").delete().eq("job_id", id);
+
+    // 6. Unlink questions associated with this job (set job_id = null instead of deleting shared questions)
+    await admin.from("questions").update({ job_id: null }).eq("job_id", id);
+
+    // 7. Delete the job row itself
+    const { error } = await admin.from("jobs").delete().eq("id", id);
 
     if (error) {
       console.error("Failed to delete job row:", error);

@@ -67,7 +67,38 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(data);
   }
 
-  return NextResponse.json({ error: "job_id or candidate_id required" }, { status: 400 });
+  // Fetch all applications if no specific filter is passed
+  let { data, error } = await admin
+    .from("applications")
+    .select("*, profiles!candidate_id(name, email), jobs(id, title, department, type, status, target_skills)")
+    .order("applied_at", { ascending: false });
+
+  if (error) {
+    const { data: apps, error: appsError } = await admin
+      .from("applications")
+      .select("*")
+      .order("applied_at", { ascending: false });
+    if (appsError) return NextResponse.json({ error: appsError.message }, { status: 500 });
+
+    const candidateIds = [...new Set((apps ?? []).map((a: any) => a.candidate_id).filter(Boolean))];
+    const jobIds = [...new Set((apps ?? []).map((a: any) => a.job_id).filter(Boolean))];
+
+    const [profilesRes, jobsRes] = await Promise.all([
+      candidateIds.length > 0 ? admin.from("profiles").select("id, name, email").in("id", candidateIds) : Promise.resolve({ data: [] }),
+      jobIds.length > 0 ? admin.from("jobs").select("id, title, department, type, status, target_skills").in("id", jobIds) : Promise.resolve({ data: [] }),
+    ]);
+
+    const profileMap = new Map((profilesRes.data ?? []).map((p: any) => [p.id, p]));
+    const jobMap = new Map((jobsRes.data ?? []).map((j: any) => [j.id, j]));
+
+    data = (apps ?? []).map((a: any) => ({
+      ...a,
+      profiles: profileMap.get(a.candidate_id) ?? null,
+      jobs: jobMap.get(a.job_id) ?? null,
+    }));
+  }
+
+  return NextResponse.json(data ?? []);
 }
 
 // POST /api/applications  — candidate applies
@@ -108,24 +139,48 @@ export async function POST(req: NextRequest) {
       profile = newProf;
     }
 
-    // Insert or update application record
-    const { data, error } = await admin
+    // Check if application already exists
+    const { data: existingApp } = await admin
       .from("applications")
-      .upsert(
-        {
+      .select("id")
+      .eq("job_id", job_id)
+      .eq("candidate_id", candidate_id)
+      .maybeSingle();
+
+    let data: any = null;
+    let error: any = null;
+
+    if (existingApp?.id) {
+      const res = await admin
+        .from("applications")
+        .update({
+          cover_note: cover_note || "",
+          status: "applied",
+          applied_at: new Date().toISOString(),
+        })
+        .eq("id", existingApp.id)
+        .select()
+        .single();
+      data = res.data;
+      error = res.error;
+    } else {
+      const res = await admin
+        .from("applications")
+        .insert({
           job_id,
           candidate_id,
           cover_note: cover_note || "",
           status: "applied",
           applied_at: new Date().toISOString(),
-        },
-        { onConflict: "job_id,candidate_id" }
-      )
-      .select()
-      .single();
+        })
+        .select()
+        .single();
+      data = res.data;
+      error = res.error;
+    }
 
     if (error) {
-      console.error("Application insert/upsert error:", error);
+      console.error("Application insert/update error:", error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 

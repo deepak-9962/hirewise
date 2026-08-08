@@ -29,12 +29,16 @@ interface OllamaResponse {
 // ── Configuration ──────────────────────────────────────────
 
 function getConfig() {
+  let geminiModel = process.env.GEMINI_MODEL ?? "gemini-1.5-flash";
+  if (!geminiModel || geminiModel.includes("3.5") || geminiModel.includes("invalid")) {
+    geminiModel = "gemini-1.5-flash";
+  }
   return {
-    aiProvider: process.env.AI_PROVIDER ?? "ollama",
+    aiProvider: process.env.AI_PROVIDER ?? "gemini",
     ollamaBaseUrl: process.env.OLLAMA_BASE_URL ?? "http://localhost:11434",
     ollamaModel: process.env.OLLAMA_MODEL ?? "mistral",
     geminiApiKey: process.env.GEMINI_API_KEY ?? "",
-    geminiModel: process.env.GEMINI_MODEL ?? "gemini-1.5-flash",
+    geminiModel,
     timeoutMs: parseInt(process.env.AI_TIMEOUT_MS ?? "30000", 10),
     maxRetries: parseInt(process.env.AI_MAX_RETRIES ?? "2", 10),
   };

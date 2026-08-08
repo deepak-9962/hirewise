@@ -316,9 +316,10 @@ export default function InterviewSessionPage({ params }: { params: Promise<{ id:
     if (currentIndex < totalQuestions - 1) {
       setCurrentIndex(currentIndex + 1);
     } else {
-      // Generate final report
       setShowComplete(true);
       setGeneratingReport(true);
+      let reportData = null;
+
       try {
         const questionsData = questions.map((q) => ({
           question: q.text,
@@ -334,43 +335,43 @@ export default function InterviewSessionPage({ params }: { params: Promise<{ id:
           body: JSON.stringify({ questions: questionsData }),
         });
         const data = await res.json();
-        if (data.success) {
+        if (data.success && data.report) {
+          reportData = data.report;
           setFinalReport(data.report);
-
-          // Save everything to Supabase
-          setSaving(true);
-          try {
-            await fetch("/api/interview/save", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                interviewId: interviewId,
-                candidateId: user?.id,
-                jobId: jobId,
-                jobTitle: jobTitle,
-                questions,
-                answers,
-                evaluations,
-                finalReport: data.report,
-                proctoring: {
-                  violations: proctoring.violations,
-                  tabSwitchCount: proctoring.tabSwitchCount,
-                  fullscreenExitCount: proctoring.fullscreenExitCount,
-                  copyPasteCount: proctoring.copyPasteCount,
-                  totalViolations: proctoring.violations.length,
-                },
-              }),
-            });
-          } catch (saveErr) {
-            console.error("Failed to save interview results:", saveErr);
-          } finally {
-            setSaving(false);
-          }
         }
       } catch (err) {
-        console.error("Report generation failed:", err);
+        console.error("Client report generation call failed:", err);
       } finally {
         setGeneratingReport(false);
+      }
+
+      setSaving(true);
+      try {
+        await fetch("/api/interview/save", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            interviewId: interviewId,
+            candidateId: user?.id,
+            jobId: jobId,
+            jobTitle: jobTitle,
+            questions,
+            answers,
+            evaluations,
+            finalReport: reportData,
+            proctoring: {
+              violations: proctoring.violations,
+              tabSwitchCount: proctoring.tabSwitchCount,
+              fullscreenExitCount: proctoring.fullscreenExitCount,
+              copyPasteCount: proctoring.copyPasteCount,
+              totalViolations: proctoring.violations.length,
+            },
+          }),
+        });
+      } catch (saveErr) {
+        console.error("Failed to save interview results:", saveErr);
+      } finally {
+        setSaving(false);
       }
     }
   };
