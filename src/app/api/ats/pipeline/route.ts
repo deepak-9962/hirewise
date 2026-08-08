@@ -43,9 +43,9 @@ export async function GET(req: NextRequest) {
     jobIds.length > 0
       ? admin.from("jobs").select("id, title, department, type, status, target_skills, recruiter_id").in("id", jobIds)
       : { data: [] },
-    admin.from("interviews").select("id, application_id, status, score, completed_at").in(
-      "application_id", appIds
-    ),
+    candidateIds.length > 0
+      ? admin.from("interviews").select("id, job_id, candidate_id, application_id, status, score, completed_at").in("candidate_id", candidateIds)
+      : { data: [] },
     admin.from("reports").select("id, candidate_id, overall_score, ai_summary").in("candidate_id", candidateIds),
     admin.from("pipeline_notes").select("*").in(
       "application_id", appIds
@@ -63,7 +63,11 @@ export async function GET(req: NextRequest) {
 
   const profileMap = new Map((profilesRes.data ?? []).map((p: any) => [p.id, p]));
   const jobMap = new Map((jobsRes.data ?? []).map((j: any) => [j.id, j]));
-  const interviewMap = new Map((interviewsRes.data ?? []).map((i: any) => [i.application_id, i]));
+  const interviewMap = new Map<string, any>();
+  for (const i of (interviewsRes.data ?? []) as any[]) {
+    if (i.application_id) interviewMap.set(i.application_id, i);
+    if (i.job_id && i.candidate_id) interviewMap.set(`${i.job_id}_${i.candidate_id}`, i);
+  }
   const reportMap = new Map<string, any>();
   for (const r of (reportsRes.data ?? []) as any[]) {
     if (!reportMap.has(r.candidate_id)) reportMap.set(r.candidate_id, r);
@@ -88,7 +92,7 @@ export async function GET(req: NextRequest) {
     ...app,
     profiles: profileMap.get(app.candidate_id) ?? null,
     jobs: jobMap.get(app.job_id) ?? null,
-    interviews: interviewMap.get(app.id) ?? null,
+    interviews: interviewMap.get(app.id) ?? interviewMap.get(`${app.job_id}_${app.candidate_id}`) ?? null,
     reports: reportMap.get(app.candidate_id) ?? null,
     resume_score: resumeScoreMap.get(app.id) ?? null,
     notes: notesMap.get(app.id) ?? [],

@@ -342,27 +342,23 @@ export function useApplications(jobId?: string) {
   return useRealtimeQuery(
     async () => {
       return queryWithFallback(
-        () =>
-          supabase
-            .from("applications")
-            .select("*, profiles!candidate_id(name, email)")
-            .eq("job_id", jobId!)
-            .order("applied_at", { ascending: false }),
+        () => {
+          let q = supabase.from("applications").select("*, profiles!candidate_id(name, email)");
+          if (jobId && jobId !== "all") q = q.eq("job_id", jobId);
+          return q.order("applied_at", { ascending: false });
+        },
         async () => {
-          const { data, error } = await supabase
-            .from("applications")
-            .select("*")
-            .eq("job_id", jobId!)
-            .order("applied_at", { ascending: false });
+          let q = supabase.from("applications").select("*");
+          if (jobId && jobId !== "all") q = q.eq("job_id", jobId);
+          const { data, error } = await q.order("applied_at", { ascending: false });
           if (error || !data) return { data, error };
           const enriched = await enrichWithProfiles(data, "candidate_id");
           return { data: enriched as any, error: null };
         }
       );
     },
-    { table: "applications", filter: jobId ? `job_id=eq.${jobId}` : undefined },
-    [jobId],
-    { enabled: !!jobId }
+    { table: "applications", filter: jobId && jobId !== "all" ? `job_id=eq.${jobId}` : undefined },
+    [jobId]
   );
 }
 
