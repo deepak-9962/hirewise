@@ -21,7 +21,7 @@ export default function CandidateInterviewsPage() {
   const { data, loading } = useCandidateInterviews(user?.id);
   const allInterviews = (data as InterviewRow[] | null) || [];
   const upcoming = allInterviews.filter((i) => i.status === "scheduled" || i.status === "in-progress");
-  const completed = allInterviews.filter((i) => i.status === "completed");
+  const past = allInterviews.filter((i) => i.status === "completed" || i.status === "cancelled");
 
   const fmtDate = (d: string | null) => d ? new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "";
   const fmtTime = (d: string | null) => d ? new Date(d).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "";
@@ -88,29 +88,37 @@ export default function CandidateInterviewsPage() {
                     <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3">Department</th>
                     <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3">Date</th>
                     <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3">Type</th>
-                    <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3">Score</th>
+                    <th className="text-left text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3">Score / Status</th>
                     <th className="text-right text-xs font-semibold text-slate-500 uppercase tracking-wider px-5 py-3">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50 dark:divide-slate-700/50">
-                  {completed.length > 0 ? completed.map((interview) => (
+                  {past.length > 0 ? past.map((interview) => (
                     <tr key={interview.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
                       <td className="px-5 py-4 text-sm font-medium text-slate-900 dark:text-white">{interview.jobs?.title || "Interview"}</td>
                       <td className="px-5 py-4 text-sm text-slate-500">{interview.jobs?.department || "—"}</td>
-                      <td className="px-5 py-4 text-sm text-slate-500">{fmtDate(interview.completed_at)}</td>
+                      <td className="px-5 py-4 text-sm text-slate-500">{fmtDate(interview.completed_at || interview.scheduled_at)}</td>
                       <td className="px-5 py-4"><span className="text-xs font-medium bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2 py-1 rounded-full">{interview.type || "Technical"}</span></td>
                       <td className="px-5 py-4">
-                        <span className={`text-sm font-bold ${(interview.score ?? 0) >= 85 ? "text-green-600" : (interview.score ?? 0) >= 70 ? "text-amber-600" : "text-red-500"}`}>
-                          {interview.score != null ? `${Math.round(interview.score)}/100` : "—"}
-                        </span>
+                        {interview.status === "cancelled" ? (
+                          <span className="text-xs font-bold bg-red-100 text-red-700 px-2.5 py-1 rounded-full">Terminated (Proctored)</span>
+                        ) : (
+                          <span className={`text-sm font-bold ${(interview.score ?? 0) >= 85 ? "text-green-600" : (interview.score ?? 0) >= 70 ? "text-amber-600" : "text-red-500"}`}>
+                            {interview.score != null ? `${Math.round(interview.score)}/100` : "—"}
+                          </span>
+                        )}
                       </td>
                       <td className="px-5 py-4 text-right">
-                        <Link href="/candidate/reports" className="text-sm text-primary font-medium hover:underline">View Report</Link>
+                        {interview.status === "cancelled" ? (
+                          <span className="text-xs text-slate-400 font-medium italic">No Report</span>
+                        ) : (
+                          <Link href="/candidate/reports" className="text-sm text-primary font-medium hover:underline">View Report</Link>
+                        )}
                       </td>
                     </tr>
                   )) : (
                     <tr>
-                      <td colSpan={6} className="px-5 py-10 text-center text-slate-400">No completed interviews yet</td>
+                      <td colSpan={6} className="px-5 py-10 text-center text-slate-400">No past interviews yet</td>
                     </tr>
                   )}
                 </tbody>
@@ -122,3 +130,4 @@ export default function CandidateInterviewsPage() {
     </div>
   );
 }
+

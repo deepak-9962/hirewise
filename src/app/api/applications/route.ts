@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
   if (candidateId) {
     let { data, error } = await admin
       .from("applications")
-      .select("*, jobs(id, title, department, type, status, target_skills)")
+      .select("*, jobs(id, title, department, type, status, target_skills), interviews(id, status, scheduled_at)")
       .eq("candidate_id", candidateId)
       .order("applied_at", { ascending: false });
 
@@ -56,16 +56,26 @@ export async function GET(req: NextRequest) {
       if (appsError) return NextResponse.json({ error: appsError.message }, { status: 500 });
 
       const jobIds = [...new Set((apps ?? []).map((a: any) => a.job_id).filter(Boolean))];
-      let jobMap = new Map<string, any>();
-      if (jobIds.length > 0) {
-        const { data: jobs } = await admin.from("jobs").select("id, title, department, type, status, target_skills").in("id", jobIds);
-        jobMap = new Map((jobs ?? []).map((j: any) => [j.id, j]));
-      }
-      data = (apps ?? []).map((a: any) => ({ ...a, jobs: jobMap.get(a.job_id) ?? null }));
+      const appIds = [...new Set((apps ?? []).map((a: any) => a.id).filter(Boolean))];
+
+      const [jobsRes, interviewsRes] = await Promise.all([
+        jobIds.length > 0 ? admin.from("jobs").select("id, title, department, type, status, target_skills").in("id", jobIds) : Promise.resolve({ data: [] }),
+        appIds.length > 0 ? admin.from("interviews").select("id, status, scheduled_at, application_id").in("application_id", appIds) : Promise.resolve({ data: [] }),
+      ]);
+
+      const jobMap = new Map((jobsRes.data ?? []).map((j: any) => [j.id, j]));
+      const interviewMap = new Map((interviewsRes.data ?? []).map((i: any) => [i.application_id, i]));
+
+      data = (apps ?? []).map((a: any) => ({
+        ...a,
+        jobs: jobMap.get(a.job_id) ?? null,
+        interviews: interviewMap.get(a.id) ?? null,
+      }));
     }
 
     return NextResponse.json(data);
   }
+
 
   // Fetch all applications if no specific filter is passed
   let { data, error } = await admin

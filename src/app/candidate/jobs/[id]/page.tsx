@@ -124,18 +124,19 @@ export default function CandidateJobDetailPage({ params }: { params: Promise<{ i
             </span>
             <p className="text-xs text-slate-400">Applied {new Date(existingApp.applied_at).toLocaleDateString()}</p>
 
-            {/* Show "Take Test" if test is enabled and interview exists */}
+            {/* Show "Take Test" if test is enabled */}
             {existingApp.status === "test_enabled" && (
               <div className="mt-4">
                 <Link
-                  href="/candidate/interviews"
-                  className="bg-primary text-white px-6 py-2.5 rounded-lg text-sm font-bold hover:bg-blue-700 transition-all inline-flex items-center gap-2"
+                  href={existingApp.interviews?.id ? `/interview/${existingApp.interviews.id}` : "/candidate/interviews"}
+                  className="bg-primary text-white px-6 py-2.5 rounded-lg text-sm font-bold hover:bg-blue-700 transition-all inline-flex items-center gap-2 shadow-md shadow-primary/20"
                 >
-                  <span className="material-symbols-outlined text-sm">videocam</span> Go to My Interviews
+                  <span className="material-symbols-outlined text-sm">videocam</span> Start Technical Test Now
                 </Link>
               </div>
             )}
           </div>
+
         ) : showForm ? (
           <div>
             <h2 className="font-bold text-slate-900 dark:text-white mb-4">Apply for {j.title}</h2>

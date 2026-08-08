@@ -172,6 +172,7 @@ export default function InterviewSessionPage({ params }: { params: Promise<{ id:
   const [questions, setQuestions] = useState<Question[]>(mockQuestions);
   const [jobTitle, setJobTitle] = useState("Technical Interview");
   const [jobId, setJobId] = useState<string | null>(null);
+  const [applicationId, setApplicationId] = useState<string | null>(null);
   const [questionsLoading, setQuestionsLoading] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [saving, setSaving] = useState(false);
@@ -207,20 +208,21 @@ export default function InterviewSessionPage({ params }: { params: Promise<{ id:
         if (data.questions?.length) {
           const mapped: Question[] = data.questions.map((q: any, i: number) => ({
             id: i + 1,
-            dbId: q.id,
+            dbId: q.dbId || q.id,
             type: (q.type as "descriptive" | "coding") ?? "descriptive",
             difficulty: (q.difficulty as "Easy" | "Medium" | "Hard") ?? "Medium",
             skill: q.skill ?? "",
             text: q.text,
-            timeLimit: q.time_limit ?? 300,
+            timeLimit: q.timeLimit ?? q.time_limit ?? 300,
             language: q.language,
-            starterCode: q.starter_code,
+            starterCode: q.starterCode || q.starter_code,
           }));
           setQuestions(mapped);
           setTimeLeft(mapped[0]?.timeLimit ?? 300);
         }
         if (data.jobTitle) setJobTitle(data.jobTitle);
         if (data.jobId) setJobId(data.jobId);
+        if (data.applicationId) setApplicationId(data.applicationId);
       })
       .catch(() => {})
       .finally(() => setQuestionsLoading(false));
@@ -229,63 +231,8 @@ export default function InterviewSessionPage({ params }: { params: Promise<{ id:
   const currentQ = questions[currentIndex];
   const totalQuestions = questions.length;
 
-  // Timer
-  useEffect(() => {
-    if (isPaused || showComplete) return;
-    if (timeLeft <= 0) {
-      // Auto-submit
-      handleSubmit();
-      return;
-    }
-    const timer = setInterval(() => setTimeLeft((t) => t - 1), 1000);
-    return () => clearInterval(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [timeLeft, isPaused, showComplete]);
-
-  // Reset timer on question change
-  useEffect(() => {
-    if (questions[currentIndex]) setTimeLeft(questions[currentIndex].timeLimit);
-  }, [currentIndex, questions]);
-
-  // Exit fullscreen when interview completes
-  useEffect(() => {
-    if (showComplete || proctoring.isTerminated) {
-      proctoring.exitFullscreen();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showComplete, proctoring.isTerminated]);
-
-  // Update DB to mark as cancelled when proctoring terminates it
-  useEffect(() => {
-    if (proctoring.isTerminated && interviewId && interviewId !== "demo") {
-      const markCancelled = async () => {
-        const supabase = createClient();
-        const { error } = await supabase
-          .from("interviews")
-          .update({
-            status: "cancelled",
-            completed_at: new Date().toISOString(),
-            proctoring_data: {
-              violations: proctoring.violations,
-              copyPasteCount: proctoring.copyPasteCount,
-              tabSwitchCount: proctoring.tabSwitchCount,
-              totalViolations: proctoring.violations.length,
-              fullscreenExitCount: proctoring.fullscreenExitCount,
-            },
-          })
-          .eq("id", interviewId);
-
-        if (error) {
-          console.error("Failed to mark interview as cancelled in DB:", error);
-        } else {
-          console.log("Interview marked as cancelled in DB due to proctoring termination.");
-        }
-      };
-      markCancelled();
-    }
-  }, [proctoring.isTerminated, interviewId, proctoring.violations, proctoring.copyPasteCount, proctoring.tabSwitchCount, proctoring.fullscreenExitCount]);
-
   const handleSubmit = useCallback(async () => {
+    if (!currentQ) return;
     setIsSubmitted((prev) => ({ ...prev, [currentQ.id]: true }));
     setEvaluating((prev) => ({ ...prev, [currentQ.id]: true }));
 
@@ -312,7 +259,7 @@ export default function InterviewSessionPage({ params }: { params: Promise<{ id:
     }
   }, [currentQ, answers]);
 
-  const handleNext = async () => {
+  const handleNext = useCallback(async () => {
     if (currentIndex < totalQuestions - 1) {
       setCurrentIndex(currentIndex + 1);
     } else {
@@ -354,6 +301,7 @@ export default function InterviewSessionPage({ params }: { params: Promise<{ id:
             interviewId: interviewId,
             candidateId: user?.id,
             jobId: jobId,
+            applicationId: applicationId,
             jobTitle: jobTitle,
             questions,
             answers,
@@ -374,7 +322,73 @@ export default function InterviewSessionPage({ params }: { params: Promise<{ id:
         setSaving(false);
       }
     }
-  };
+  }, [currentIndex, totalQuestions, questions, answers, evaluations, interviewId, user?.id, jobId, applicationId, jobTitle, proctoring]);
+
+  // Timer: only tick down after interview has explicitly started
+  useEffect(() => {
+    if (isPaused || showComplete || !interviewStarted) return;
+    if (timeLeft <= 0) {
+      if (currentQ && !isSubmitted[currentQ.id]) {
+        handleSubmit();
+      } else {
+        handleNext();
+      }
+      return;
+    }
+    const timer = setInterval(() => setTimeLeft((t) => t - 1), 1000);
+    return () => clearInterval(timer);
+  }, [timeLeft, isPaused, showComplete, interviewStarted, currentQ, isSubmitted, handleSubmit, handleNext]);
+
+  // Reset timer on question change
+  useEffect(() => {
+    if (questions[currentIndex]) setTimeLeft(questions[currentIndex].timeLimit);
+  }, [currentIndex, questions]);
+
+  // Exit fullscreen when interview completes
+  useEffect(() => {
+    if (showComplete || proctoring.isTerminated) {
+      proctoring.exitFullscreen();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showComplete, proctoring.isTerminated]);
+
+  // Update DB to mark as cancelled when proctoring terminates it
+  useEffect(() => {
+    if (proctoring.isTerminated && interviewId && interviewId !== "demo") {
+      const markCancelled = async () => {
+        const supabase = createClient();
+        const { error } = await supabase
+          .from("interviews")
+          .update({
+            status: "cancelled",
+            completed_at: new Date().toISOString(),
+            proctoring_data: {
+              violations: proctoring.violations,
+              copyPasteCount: proctoring.copyPasteCount,
+              tabSwitchCount: proctoring.tabSwitchCount,
+              totalViolations: proctoring.violations.length,
+              fullscreenExitCount: proctoring.fullscreenExitCount,
+            },
+          })
+          .eq("id", interviewId);
+
+        if (error) {
+          console.error("Failed to mark interview as cancelled in DB:", error);
+        } else {
+          console.log("Interview marked as cancelled in DB due to proctoring termination.");
+        }
+
+        if (applicationId) {
+          await supabase
+            .from("applications")
+            .update({ status: "rejected" })
+            .eq("id", applicationId);
+        }
+      };
+      markCancelled();
+    }
+  }, [proctoring.isTerminated, interviewId, applicationId, proctoring.violations, proctoring.copyPasteCount, proctoring.tabSwitchCount, proctoring.fullscreenExitCount]);
+
 
   const handleRunCode = async () => {
     setRunningCode(true);

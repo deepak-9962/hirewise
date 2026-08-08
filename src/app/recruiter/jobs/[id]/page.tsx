@@ -117,6 +117,27 @@ export default function ManageJobPage({ params }: { params: Promise<{ id: string
     setActionLoading(null);
   };
 
+  const handleShortlist = async (appId: string) => {
+    setActionLoading(appId + "_shortlist");
+    await updateApplicationStatus(appId, "shortlisted");
+    refetchApps();
+    setActionLoading(null);
+  };
+
+  const handleScheduleInterview = async (appId: string) => {
+    setActionLoading(appId + "_sched_interview");
+    await updateApplicationStatus(appId, "interview_scheduled");
+    refetchApps();
+    setActionLoading(null);
+  };
+
+  const handleOffer = async (appId: string) => {
+    setActionLoading(appId + "_offer");
+    await updateApplicationStatus(appId, "offered");
+    refetchApps();
+    setActionLoading(null);
+  };
+
   const handleReject = async (appId: string) => {
     setActionLoading(appId + "_reject");
     await updateApplicationStatus(appId, "rejected");
@@ -130,6 +151,7 @@ export default function ManageJobPage({ params }: { params: Promise<{ id: string
     refetchApps();
     setActionLoading(null);
   };
+
 
   const handleAddQuestion = async (questionId: string) => {
     setActionLoading("add_" + questionId);
@@ -511,6 +533,13 @@ export default function ManageJobPage({ params }: { params: Promise<{ id: string
                     {(app.status === "applied" || app.status === "under_review") && (
                       <>
                         <button
+                          onClick={() => handleShortlist(app.id)}
+                          disabled={actionLoading === app.id + "_shortlist"}
+                          className="text-xs font-bold bg-cyan-600 text-white px-3 py-1.5 rounded-lg hover:bg-cyan-700 transition-all disabled:opacity-50 flex items-center gap-1"
+                        >
+                          <span className="material-symbols-outlined text-xs">star</span> Shortlist
+                        </button>
+                        <button
                           onClick={() => handleEnableTest(app)}
                           disabled={actionLoading === app.id + "_enable"}
                           className="text-xs font-bold bg-green-600 text-white px-3 py-1.5 rounded-lg hover:bg-green-700 transition-all disabled:opacity-50 flex items-center gap-1"
@@ -527,7 +556,91 @@ export default function ManageJobPage({ params }: { params: Promise<{ id: string
                       </>
                     )}
 
+                    {app.status === "shortlisted" && (
+                      <>
+                        <button
+                          onClick={() => handleEnableTest(app)}
+                          disabled={actionLoading === app.id + "_enable"}
+                          className="text-xs font-bold bg-green-600 text-white px-3 py-1.5 rounded-lg hover:bg-green-700 transition-all disabled:opacity-50 flex items-center gap-1"
+                        >
+                          {actionLoading === app.id + "_enable" ? "..." : <><span className="material-symbols-outlined text-xs">play_arrow</span> Enable Test</>}
+                        </button>
+                        <button
+                          onClick={() => handleReject(app.id)}
+                          disabled={actionLoading === app.id + "_reject"}
+                          className="text-xs font-bold bg-red-50 text-red-500 px-3 py-1.5 rounded-lg hover:bg-red-100 transition-all disabled:opacity-50"
+                        >
+                          Reject
+                        </button>
+                      </>
+                    )}
+
+                    {app.status === "test_enabled" && (
+                      <>
+                        <span className="text-xs text-amber-600 font-medium italic mr-1">Test Pending Candidate</span>
+                        <button
+                          onClick={() => handleReject(app.id)}
+                          disabled={actionLoading === app.id + "_reject"}
+                          className="text-xs font-bold bg-red-50 text-red-500 px-3 py-1.5 rounded-lg hover:bg-red-100 transition-all disabled:opacity-50"
+                        >
+                          Reject
+                        </button>
+                      </>
+                    )}
+
                     {app.status === "test_completed" && (
+                      <>
+                        <button
+                          onClick={() => handleScheduleInterview(app.id)}
+                          disabled={actionLoading === app.id + "_sched_interview"}
+                          className="text-xs font-bold bg-orange-600 text-white px-3 py-1.5 rounded-lg hover:bg-orange-700 transition-all disabled:opacity-50 flex items-center gap-1"
+                        >
+                          <span className="material-symbols-outlined text-xs">event</span> Schedule Interview
+                        </button>
+                        <button
+                          onClick={() => handleMarkHired(app.id)}
+                          disabled={actionLoading === app.id + "_hire"}
+                          className="text-xs font-bold bg-emerald-600 text-white px-3 py-1.5 rounded-lg hover:bg-emerald-700 transition-all disabled:opacity-50 flex items-center gap-1"
+                        >
+                          <span className="material-symbols-outlined text-xs">handshake</span> Hire
+                        </button>
+                        <button
+                          onClick={() => handleReject(app.id)}
+                          disabled={actionLoading === app.id + "_reject"}
+                          className="text-xs font-bold bg-red-50 text-red-500 px-3 py-1.5 rounded-lg hover:bg-red-100 transition-all disabled:opacity-50"
+                        >
+                          Reject
+                        </button>
+                      </>
+                    )}
+
+                    {app.status === "interview_scheduled" && (
+                      <>
+                        <button
+                          onClick={() => handleOffer(app.id)}
+                          disabled={actionLoading === app.id + "_offer"}
+                          className="text-xs font-bold bg-teal-600 text-white px-3 py-1.5 rounded-lg hover:bg-teal-700 transition-all disabled:opacity-50 flex items-center gap-1"
+                        >
+                          <span className="material-symbols-outlined text-xs">local_offer</span> Make Offer
+                        </button>
+                        <button
+                          onClick={() => handleMarkHired(app.id)}
+                          disabled={actionLoading === app.id + "_hire"}
+                          className="text-xs font-bold bg-emerald-600 text-white px-3 py-1.5 rounded-lg hover:bg-emerald-700 transition-all disabled:opacity-50 flex items-center gap-1"
+                        >
+                          <span className="material-symbols-outlined text-xs">handshake</span> Hire
+                        </button>
+                        <button
+                          onClick={() => handleReject(app.id)}
+                          disabled={actionLoading === app.id + "_reject"}
+                          className="text-xs font-bold bg-red-50 text-red-500 px-3 py-1.5 rounded-lg hover:bg-red-100 transition-all disabled:opacity-50"
+                        >
+                          Reject
+                        </button>
+                      </>
+                    )}
+
+                    {app.status === "offered" && (
                       <>
                         <button
                           onClick={() => handleMarkHired(app.id)}
@@ -545,6 +658,7 @@ export default function ManageJobPage({ params }: { params: Promise<{ id: string
                         </button>
                       </>
                     )}
+
                   </div>
                 </div>
               ))}
