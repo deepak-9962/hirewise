@@ -253,7 +253,22 @@ export function useJobs(status?: string) {
 
 export function useJobById(id?: string) {
   return useRealtimeQuery(
-    () => supabase.from("jobs").select("*").eq("id", id!).single(),
+    async () => {
+      const primary = await supabase.from("jobs").select("*").eq("id", id!).maybeSingle();
+      if (!primary.error && primary.data) {
+        return primary;
+      }
+      try {
+        const res = await fetch(`/api/jobs/${id}`);
+        if (res.ok) {
+          const json = await res.json();
+          if (json.data) return { data: json.data, error: null };
+        }
+      } catch (e) {
+        console.error("useJobById API fallback error:", e);
+      }
+      return primary;
+    },
     { table: "jobs", filter: id ? `id=eq.${id}` : undefined },
     [id],
     { enabled: !!id }

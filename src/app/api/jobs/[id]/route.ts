@@ -1,6 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  if (!id) return NextResponse.json({ error: "Missing job id" }, { status: 400 });
+
+  const supabaseAdmin = getSupabaseAdmin();
+  const { data, error } = await supabaseAdmin.from("jobs").select("*").eq("id", id).maybeSingle();
+
+  if (error || !data) {
+    return NextResponse.json({ error: "Job not found" }, { status: 404 });
+  }
+
+  return NextResponse.json({ data });
+}
+
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }

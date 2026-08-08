@@ -82,34 +82,50 @@ export async function POST(req: NextRequest) {
 
     const admin = getSupabaseAdmin();
 
-    // Ensure candidate profile exists
-    const { data: profile, error: profileErr } = await admin
+    // Ensure candidate profile exists (auto-create if missing)
+    let { data: profile } = await admin
       .from("profiles")
       .select("id")
       .eq("id", candidate_id)
-      .single();
+      .maybeSingle();
 
-    if (profileErr || !profile) {
-      console.error("Profile check error or profile not found:", profileErr);
-      return NextResponse.json({ error: "Candidate profile not found" }, { status: 404 });
+    if (!profile) {
+      const { data: newProf, error: createProfErr } = await admin
+        .from("profiles")
+        .upsert({
+          id: candidate_id,
+          name: "Candidate",
+          email: "",
+          role: "candidate",
+          status: "active",
+        })
+        .select("id")
+        .maybeSingle();
+
+      if (createProfErr) {
+        console.error("Failed to auto-create profile for application:", createProfErr);
+      }
+      profile = newProf;
     }
 
+    // Insert or update application record
     const { data, error } = await admin
       .from("applications")
-      .insert({
-        job_id,
-        candidate_id,
-        cover_note,
-        status: "applied",
-      })
+      .upsert(
+        {
+          job_id,
+          candidate_id,
+          cover_note: cover_note || "",
+          status: "applied",
+          applied_at: new Date().toISOString(),
+        },
+        { onConflict: "job_id,candidate_id" }
+      )
       .select()
       .single();
 
     if (error) {
-      console.error("Application insert error:", error);
-      if (error.code === "23505") {
-        return NextResponse.json({ error: "Already applied to this job" }, { status: 409 });
-      }
+      console.error("Application insert/upsert error:", error);
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
@@ -118,7 +134,7 @@ export async function POST(req: NextRequest) {
       .from("jobs")
       .select("applicants_count")
       .eq("id", job_id)
-      .single();
+      .maybeSingle();
 
     if (jobRow) {
       await admin
