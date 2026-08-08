@@ -60,8 +60,17 @@ export function useSupabaseQuery<T>(
   const [data, setData] = useState<T | null>(() => {
     return queryMemoryCache.has(cacheKey) ? queryMemoryCache.get(cacheKey) : null;
   });
-  const [loading, setLoading] = useState<boolean>(() => !queryMemoryCache.has(cacheKey));
+  const [loading, setLoading] = useState<boolean>(() => !queryMemoryCache.has(cacheKey) && enabled);
   const [error, setError] = useState<string | null>(null);
+
+  // Sync state when cacheKey or enabled changes during render
+  const [prevCacheKey, setPrevCacheKey] = useState(cacheKey);
+  if (prevCacheKey !== cacheKey) {
+    setPrevCacheKey(cacheKey);
+    const cached = queryMemoryCache.has(cacheKey) ? queryMemoryCache.get(cacheKey) : null;
+    setData(cached);
+    setLoading(!queryMemoryCache.has(cacheKey) && enabled);
+  }
 
   // Always use latest queryFn via ref (avoids stale closure issues)
   const queryFnRef = useRef(queryFn);
@@ -122,6 +131,9 @@ export function useRealtimeQuery<T>(
   const { enabled = true } = options;
   const base = useSupabaseQuery(queryFn, deps, options);
 
+  const refetchRef = useRef(base.refetch);
+  refetchRef.current = base.refetch;
+
   useEffect(() => {
     if (!enabled) return;
 
@@ -142,7 +154,7 @@ export function useRealtimeQuery<T>(
         channelFilter as any,
         () => {
           // Auto-refetch when any matching change occurs
-          base.refetch();
+          refetchRef.current();
         }
       )
       .subscribe();
@@ -150,8 +162,7 @@ export function useRealtimeQuery<T>(
     return () => {
       supabase.removeChannel(channel);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled, realtimeConfig.table, realtimeConfig.event, realtimeConfig.filter, base.refetch]);
+  }, [enabled, realtimeConfig.table, realtimeConfig.event, realtimeConfig.filter]);
 
   return base;
 }
