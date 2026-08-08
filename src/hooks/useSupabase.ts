@@ -25,41 +25,45 @@ async function withTimeout<T>(promise: PromiseLike<T>, ms = 6000): Promise<T> {
 }
 
 // ── Shared Multiplexed Realtime Subscription ──
-// Use a SINGLE persistent channel for all realtime postgres_changes listeners
-// to prevent WebSocket connection saturation and handshake delays.
+// Subscribes per-table using valid Supabase Realtime postgres_changes filters
+// to prevent WebSocket reconnection loops and channel saturation.
 let _sharedRealtimeChannel: ReturnType<typeof supabase.channel> | null = null;
 const _realtimeListeners = new Map<string, Set<() => void>>();
 
 function getSharedRealtimeChannel() {
   if (!_sharedRealtimeChannel) {
     _sharedRealtimeChannel = supabase.channel("hirewise-global-realtime");
-
-    _sharedRealtimeChannel
-      .on("postgres_changes" as any, { event: "*", schema: "public" }, (payload: any) => {
-        const table = payload.table;
-        if (table && _realtimeListeners.has(table)) {
-          _realtimeListeners.get(table)!.forEach((callback) => callback());
-        }
-      })
-      .subscribe();
   }
   return _sharedRealtimeChannel;
 }
 
 function subscribeToTable(table: string, callback: () => void) {
+  if (!table) return () => {};
+
   if (!_realtimeListeners.has(table)) {
     _realtimeListeners.set(table, new Set());
+
+    // Register a valid postgres_changes listener for this specific table
+    getSharedRealtimeChannel()
+      .on(
+        "postgres_changes" as any,
+        { event: "*", schema: "public", table: table },
+        () => {
+          const listeners = _realtimeListeners.get(table);
+          if (listeners) {
+            listeners.forEach((cb) => cb());
+          }
+        }
+      )
+      .subscribe();
   }
+
   _realtimeListeners.get(table)!.add(callback);
-  getSharedRealtimeChannel();
 
   return () => {
     const set = _realtimeListeners.get(table);
     if (set) {
       set.delete(callback);
-      if (set.size === 0) {
-        _realtimeListeners.delete(table);
-      }
     }
   };
 }
