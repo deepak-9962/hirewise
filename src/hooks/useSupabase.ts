@@ -6,21 +6,85 @@ import { useAuth } from "@/context/AuthContext";
 
 const supabase = createClient();
 
+// ── Timeout Guard: prevent queries from hanging indefinitely ──
+async function withTimeout<T>(promise: PromiseLike<T>, ms = 6000): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`Query timed out after ${ms}ms`));
+    }, ms);
+    Promise.resolve(promise)
+      .then((res) => {
+        clearTimeout(timer);
+        resolve(res);
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
+}
+
+// ── Shared Multiplexed Realtime Subscription ──
+// Use a SINGLE persistent channel for all realtime postgres_changes listeners
+// to prevent WebSocket connection saturation and handshake delays.
+let _sharedRealtimeChannel: ReturnType<typeof supabase.channel> | null = null;
+const _realtimeListeners = new Map<string, Set<() => void>>();
+
+function getSharedRealtimeChannel() {
+  if (!_sharedRealtimeChannel) {
+    _sharedRealtimeChannel = supabase.channel("hirewise-global-realtime");
+
+    _sharedRealtimeChannel
+      .on("postgres_changes" as any, { event: "*", schema: "public" }, (payload: any) => {
+        const table = payload.table;
+        if (table && _realtimeListeners.has(table)) {
+          _realtimeListeners.get(table)!.forEach((callback) => callback());
+        }
+      })
+      .subscribe();
+  }
+  return _sharedRealtimeChannel;
+}
+
+function subscribeToTable(table: string, callback: () => void) {
+  if (!_realtimeListeners.has(table)) {
+    _realtimeListeners.set(table, new Set());
+  }
+  _realtimeListeners.get(table)!.add(callback);
+  getSharedRealtimeChannel();
+
+  return () => {
+    const set = _realtimeListeners.get(table);
+    if (set) {
+      set.delete(callback);
+      if (set.size === 0) {
+        _realtimeListeners.delete(table);
+      }
+    }
+  };
+}
+
 // ── Helper: try FK join, fall back to manual join ──
 async function queryWithFallback<T>(
   primaryQuery: () => PromiseLike<{ data: T | null; error: any }>,
   fallbackQuery: () => PromiseLike<{ data: T | null; error: any }>
 ): Promise<{ data: T | null; error: any }> {
-  const result = await primaryQuery();
-  // If 400 error (usually FK join issue), try fallback
-  if (result.error && String(result.error?.code ?? result.error?.message ?? result.error).includes("400")) {
-    return fallbackQuery();
+  try {
+    const result = await withTimeout(primaryQuery(), 4000);
+    if (result.error) {
+      const errStr = String(result.error?.code ?? result.error?.message ?? result.error);
+      if (errStr.includes("400") || /relationship|foreign key|hint/i.test(errStr)) {
+        return await withTimeout(fallbackQuery(), 4000);
+      }
+    }
+    return result;
+  } catch (err) {
+    try {
+      return await withTimeout(fallbackQuery(), 4000);
+    } catch {
+      return { data: null, error: err };
+    }
   }
-  // Also check for "Could not find a relationship" type PostgREST errors
-  if (result.error && /relationship|foreign key|hint/i.test(String(result.error?.message ?? ""))) {
-    return fallbackQuery();
-  }
-  return result;
 }
 
 async function enrichWithProfiles<T extends Record<string, any>>(
@@ -57,19 +121,21 @@ export function useSupabaseQuery<T>(
   const { enabled = true, pollInterval } = options;
   const cacheKey = JSON.stringify(deps);
 
+  const hasCache = queryMemoryCache.has(cacheKey);
+
   const [data, setData] = useState<T | null>(() => {
-    return queryMemoryCache.has(cacheKey) ? queryMemoryCache.get(cacheKey) : null;
+    return hasCache ? queryMemoryCache.get(cacheKey) : null;
   });
-  const [loading, setLoading] = useState<boolean>(() => !queryMemoryCache.has(cacheKey) && enabled);
+  const [loading, setLoading] = useState<boolean>(() => !hasCache && enabled);
   const [error, setError] = useState<string | null>(null);
 
-  // Sync state when cacheKey or enabled changes during render
-  const [prevCacheKey, setPrevCacheKey] = useState(cacheKey);
-  if (prevCacheKey !== cacheKey) {
-    setPrevCacheKey(cacheKey);
-    const cached = queryMemoryCache.has(cacheKey) ? queryMemoryCache.get(cacheKey) : null;
+  // Sync state when cacheKey changes
+  const prevCacheKey = useRef(cacheKey);
+  if (prevCacheKey.current !== cacheKey) {
+    prevCacheKey.current = cacheKey;
+    const cached = queryMemoryCache.get(cacheKey) ?? null;
     setData(cached);
-    setLoading(!queryMemoryCache.has(cacheKey) && enabled);
+    setLoading(cached === null && enabled);
   }
 
   // Always use latest queryFn via ref (avoids stale closure issues)
@@ -86,17 +152,19 @@ export function useSupabaseQuery<T>(
     }
     setError(null);
     try {
-      const { data, error } = await queryFnRef.current();
-      if (error) {
-        setError(String(error));
+      const res = await withTimeout(queryFnRef.current(), 6000);
+      if (res.error) {
+        setError(String(res.error));
       } else {
-        setData(data);
-        queryMemoryCache.set(cacheKey, data);
+        setData(res.data);
+        queryMemoryCache.set(cacheKey, res.data);
       }
     } catch (err) {
+      console.warn("useSupabaseQuery timeout/error:", err);
       setError(String(err));
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [cacheKey, enabled]);
 
   useEffect(() => {
@@ -116,8 +184,7 @@ export function useSupabaseQuery<T>(
 }
 
 // ── Realtime-enabled fetch helper ──
-// Subscribes to Supabase Realtime postgres_changes and auto-refetches on any matching event.
-let _realtimeChannelCounter = 0;
+// Subscribes to shared Realtime channel to auto-refetch without channel saturation.
 export function useRealtimeQuery<T>(
   queryFn: () => PromiseLike<{ data: T | null; error: unknown }>,
   realtimeConfig: {
@@ -135,34 +202,16 @@ export function useRealtimeQuery<T>(
   refetchRef.current = base.refetch;
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || !realtimeConfig.table) return;
 
-    const channelName = `realtime-${realtimeConfig.table}-${++_realtimeChannelCounter}`;
-    const channelFilter: Record<string, unknown> = {
-      event: realtimeConfig.event ?? "*",
-      schema: "public",
-      table: realtimeConfig.table,
-    };
-    if (realtimeConfig.filter) {
-      channelFilter.filter = realtimeConfig.filter;
-    }
-
-    const channel = supabase
-      .channel(channelName)
-      .on(
-        "postgres_changes" as any,
-        channelFilter as any,
-        () => {
-          // Auto-refetch when any matching change occurs
-          refetchRef.current();
-        }
-      )
-      .subscribe();
+    const unsubscribe = subscribeToTable(realtimeConfig.table, () => {
+      refetchRef.current();
+    });
 
     return () => {
-      supabase.removeChannel(channel);
+      unsubscribe();
     };
-  }, [enabled, realtimeConfig.table, realtimeConfig.event, realtimeConfig.filter]);
+  }, [enabled, realtimeConfig.table]);
 
   return base;
 }
