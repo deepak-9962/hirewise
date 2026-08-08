@@ -48,10 +48,25 @@ export async function PATCH(
     const { data: existing } = await admin
       .from("interviews")
       .select("id")
-      .eq("application_id", id)
-      .single();
+      .or(`application_id.eq.${id},and(candidate_id.eq.${app.candidate_id},job_id.eq.${app.job_id})`)
+      .maybeSingle();
 
-    if (!existing) {
+    const { count: questionsCount } = await admin
+      .from("job_questions")
+      .select("id", { count: "exact", head: true })
+      .eq("job_id", app.job_id);
+
+    const totalQ = questionsCount || 0;
+
+    if (existing) {
+      await admin
+        .from("interviews")
+        .update({
+          application_id: id,
+          total_questions: totalQ > 0 ? totalQ : undefined,
+        })
+        .eq("id", existing.id);
+    } else {
       await admin.from("interviews").insert({
         candidate_id: app.candidate_id,
         job_id: app.job_id,
@@ -59,6 +74,7 @@ export async function PATCH(
         status: "scheduled",
         type: "Technical",
         scheduled_at: new Date().toISOString(),
+        total_questions: totalQ,
       });
     }
   }
