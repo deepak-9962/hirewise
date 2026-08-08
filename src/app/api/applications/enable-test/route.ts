@@ -5,7 +5,8 @@ import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 // Recruiter enables test for a candidate → create interview record + set status
 export async function POST(req: NextRequest) {
   try {
-    const { application_id, candidate_id, job_id } = await req.json();
+    const body = await req.json();
+    const { application_id, candidate_id, job_id } = body;
 
     if (!application_id || !candidate_id || !job_id) {
       return NextResponse.json({ error: "application_id, candidate_id, job_id required" }, { status: 400 });
@@ -13,46 +14,67 @@ export async function POST(req: NextRequest) {
 
     const admin = getSupabaseAdmin();
 
-    // Check if interview already exists for this application or candidate+job
-    let { data: existing } = await admin
+    // 1. Ensure candidate profile exists to avoid FK error
+    const { data: profile } = await admin
+      .from("profiles")
+      .select("id")
+      .eq("id", candidate_id)
+      .maybeSingle();
+
+    if (!profile) {
+      await admin.from("profiles").upsert({
+        id: candidate_id,
+        name: "Candidate",
+        email: "",
+        role: "candidate",
+        status: "active",
+      });
+    }
+
+    // 2. Check if interview already exists for this application or candidate+job (use limit(1) to avoid 500 if multiple exist)
+    let existing: any = null;
+    const { data: existingApps } = await admin
       .from("interviews")
       .select("id, application_id")
       .eq("application_id", application_id)
-      .maybeSingle();
+      .limit(1);
 
-    if (!existing) {
-      const { data: existingByCandJob } = await admin
+    if (existingApps && existingApps.length > 0) {
+      existing = existingApps[0];
+    } else {
+      const { data: existingCandJobs } = await admin
         .from("interviews")
         .select("id, application_id")
         .eq("candidate_id", candidate_id)
         .eq("job_id", job_id)
-        .maybeSingle();
-      existing = existingByCandJob;
+        .limit(1);
+
+      if (existingCandJobs && existingCandJobs.length > 0) {
+        existing = existingCandJobs[0];
+      }
     }
 
-    // Count questions available for this job
+    // 3. Count questions available for this job
     const { count: questionsCount } = await admin
       .from("job_questions")
       .select("id", { count: "exact", head: true })
       .eq("job_id", job_id);
 
-    const totalQ = questionsCount || 0;
+    const totalQ = (questionsCount && questionsCount > 0) ? questionsCount : 5;
     let interviewId = existing?.id;
 
     if (existing) {
-      // Update existing interview to ensure application_id and total_questions are set
+      // Update existing interview
       await admin
         .from("interviews")
         .update({
           application_id: application_id,
-          total_questions: totalQ > 0 ? totalQ : undefined,
+          total_questions: totalQ,
+          status: "scheduled",
         })
         .eq("id", existing.id);
     } else {
-      // Get job for info
-      const { data: job } = await admin.from("jobs").select("title").eq("id", job_id).maybeSingle();
-
-      // Create interview record
+      // Create new interview record
       const { data: interview, error } = await admin
         .from("interviews")
         .insert({
@@ -74,7 +96,7 @@ export async function POST(req: NextRequest) {
       interviewId = interview.id;
     }
 
-    // Update application status to test_enabled
+    // 4. Update application status to test_enabled
     const { error: appErr } = await admin
       .from("applications")
       .update({ status: "test_enabled" })
@@ -91,3 +113,4 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: err.message || "Failed to enable test" }, { status: 500 });
   }
 }
+
