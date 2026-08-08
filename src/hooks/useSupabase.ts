@@ -199,8 +199,9 @@ export function useJobs(status?: string) {
 }
 
 export function useJobById(id?: string) {
-  return useSupabaseQuery(
+  return useRealtimeQuery(
     () => supabase.from("jobs").select("*").eq("id", id!).single(),
+    { table: "jobs", filter: id ? `id=eq.${id}` : undefined },
     [id],
     { enabled: !!id }
   );
@@ -360,7 +361,7 @@ export async function createInterview(applicationId: string, candidateId: string
 
 // ── Job Questions ──
 export function useJobQuestions(jobId?: string) {
-  return useSupabaseQuery(
+  return useRealtimeQuery(
     async () => {
       return queryWithFallback(
         () =>
@@ -379,6 +380,7 @@ export function useJobQuestions(jobId?: string) {
         }
       );
     },
+    { table: "job_questions", filter: jobId ? `job_id=eq.${jobId}` : undefined },
     [jobId],
     { enabled: !!jobId }
   );
@@ -394,7 +396,7 @@ export async function removeJobQuestion(jobId: string, questionId: string) {
 
 // ── Open Jobs (for candidates) ──
 export function useOpenJobs() {
-  return useSupabaseQuery(
+  return useRealtimeQuery(
     async () => {
       return queryWithFallback(
         () =>
@@ -413,6 +415,7 @@ export function useOpenJobs() {
         }
       );
     },
+    { table: "jobs" },
     []
   );
 }
@@ -474,11 +477,15 @@ export async function applyToJob(jobId: string, candidateId: string) {
 
 // ── Questions ──
 export function useQuestions(filter?: string) {
-  return useSupabaseQuery(() => {
-    let q = supabase.from("questions").select("*").order("created_at", { ascending: false });
-    if (filter && filter !== "all") q = q.eq("type", filter);
-    return q;
-  }, [filter]);
+  return useRealtimeQuery(
+    () => {
+      let q = supabase.from("questions").select("*").order("created_at", { ascending: false });
+      if (filter && filter !== "all") q = q.eq("type", filter);
+      return q;
+    },
+    { table: "questions" },
+    [filter]
+  );
 }
 
 export async function createQuestion(question: {
@@ -669,7 +676,7 @@ export function useRealtimeMonitoring() {
 
 // ── Interview Responses ──
 export function useInterviewResponses(interviewId?: string) {
-  return useSupabaseQuery(
+  return useRealtimeQuery(
     async () => {
       return queryWithFallback(
         () =>
@@ -688,6 +695,7 @@ export function useInterviewResponses(interviewId?: string) {
         }
       );
     },
+    { table: "interview_responses", filter: interviewId ? `interview_id=eq.${interviewId}` : undefined },
     [interviewId],
     { enabled: !!interviewId }
   );
@@ -758,7 +766,7 @@ export function useAllReports() {
 }
 
 export function useReport(reportId?: string) {
-  return useSupabaseQuery(
+  return useRealtimeQuery(
     async () => {
       return queryWithFallback(
         () =>
@@ -779,6 +787,7 @@ export function useReport(reportId?: string) {
         }
       );
     },
+    { table: "reports", filter: reportId ? `id=eq.${reportId}` : undefined },
     [reportId],
     { enabled: !!reportId }
   );
@@ -899,9 +908,21 @@ export function useDashboardStats(role: string) {
 
   useEffect(() => {
     fetchStats();
-  }, [fetchStats]);
 
-  // Poll every 30 seconds
+    const channel = supabase
+      .channel(`realtime-dashboard-stats-${role}`)
+      .on("postgres_changes" as any, { event: "*", schema: "public", table: "interviews" }, () => fetchStats())
+      .on("postgres_changes" as any, { event: "*", schema: "public", table: "jobs" }, () => fetchStats())
+      .on("postgres_changes" as any, { event: "*", schema: "public", table: "applications" }, () => fetchStats())
+      .on("postgres_changes" as any, { event: "*", schema: "public", table: "profiles" }, () => fetchStats())
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchStats, role]);
+
+  // Poll every 30 seconds as fallback
   useEffect(() => {
     const id = setInterval(fetchStats, 30_000);
     return () => clearInterval(id);
